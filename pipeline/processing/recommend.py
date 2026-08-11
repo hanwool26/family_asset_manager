@@ -5,11 +5,17 @@
 """
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import ai_client
 from processing import sentiment as sentiment_stage
 from processing import technical as technical_stage
+
+log = logging.getLogger("pipeline.recommend")
+
+_REGION_PICK_COUNT = 5
+_CONFIDENCE_RANK = {"high": 2, "medium": 1, "low": 0}
 
 _PROMPT_TEMPLATE = """다음은 뉴스 기반으로 도출된 종목 후보 목록입니다 (테마, 근거 체인, 신뢰도 포함).
 이 중에서 국내(KOSPI/KOSDAQ) 5종목 + 해외(NASDAQ/NYSE) 5종목, 총 10종목을 최종 추천으로 선별하세요.
@@ -49,14 +55,86 @@ def _region_for_market(market: str) -> str:
     return "KR" if market in ("KOSPI", "KOSDAQ") else "US"
 
 
+def _heuristic_selection(
+    flat_candidates: list[dict[str, Any]], universe_by_ticker: dict[str, dict[str, Any]]
+) -> dict[str, Any]:
+    """AI 선별이 끝내 실패했을 때의 규칙 기반 폴백.
+
+    신뢰도(confidence) 높은 순으로 정렬하고, 1차로 섹터가 겹치지 않는 종목을 우선 채운 뒤
+    부족하면 섹터 중복을 허용해 나머지를 채운다 (LLM 프롬프트의 "섹터 분산" 규칙을 흉내낸 것).
+    """
+
+    def _pick_region(region: str) -> list[dict[str, Any]]:
+        pool = [
+            c
+            for c in flat_candidates
+            if (meta := universe_by_ticker.get(c["ticker"])) and _region_for_market(meta["market"]) == region
+        ]
+        pool.sort(key=lambda c: _CONFIDENCE_RANK.get(c.get("confidence"), 0), reverse=True)
+
+        picked: list[dict[str, Any]] = []
+        used_sectors: set[str] = set()
+        for c in pool:
+            if len(picked) >= _REGION_PICK_COUNT:
+                break
+            sector = universe_by_ticker[c["ticker"]]["sector"]
+            if sector in used_sectors:
+                continue
+            picked.append(c)
+            used_sectors.add(sector)
+        if len(picked) < _REGION_PICK_COUNT:
+            picked_tickers = {c["ticker"] for c in picked}
+            for c in pool:
+                if len(picked) >= _REGION_PICK_COUNT:
+                    break
+                if c["ticker"] in picked_tickers:
+                    continue
+                picked.append(c)
+
+        entries = []
+        for rank, c in enumerate(picked, start=1):
+            meta = universe_by_ticker[c["ticker"]]
+            confidence = c.get("confidence") if c.get("confidence") in ("high", "medium") else "medium"
+            entries.append(
+                {
+                    "ticker": c["ticker"],
+                    "rank": rank,
+                    "rationale": (
+                        f"{meta['name']}({c.get('theme', '테마 미상')}) — AI 최종 선별 실패로 "
+                        f"뉴스 후보 신뢰도({confidence}) 기준 자동 대체 선정되었습니다."
+                    ),
+                    "risk_flags": c.get("risk_flags", []),
+                    "period": "medium",
+                    "confidence": confidence,
+                }
+            )
+        return entries
+
+    return {
+        "market_context": "AI 시장 코멘트 생성에 실패하여 자동 대체 로직으로 리포트가 생성되었습니다.",
+        "kr": _pick_region("KR"),
+        "us": _pick_region("US"),
+    }
+
+
 def select_and_enrich(
     flat_candidates: list[dict[str, Any]],
     universe_by_ticker: dict[str, dict[str, Any]],
     marketaux_articles: list[dict[str, Any]],
-) -> tuple[str, list[dict[str, Any]]]:
-    """(market_context, recommendations) 를 반환한다. recommendations 는 web/lib/types.ts Recommendation[] 형태."""
+) -> tuple[str, list[dict[str, Any]], bool]:
+    """(market_context, recommendations, degraded) 를 반환한다.
+
+    recommendations 는 web/lib/types.ts Recommendation[] 형태. degraded 는 AI 최종 선별이
+    실패해 규칙 기반 폴백으로 대체되었는지 여부.
+    """
     prompt = _PROMPT_TEMPLATE.format(candidates=_format_candidates(flat_candidates))
-    selection = ai_client.call_claude_json(prompt)
+    degraded = False
+    try:
+        selection = ai_client.call_claude_json(prompt)
+    except (ai_client.ClaudeCallError, ai_client.ClaudeCallBudgetExceeded) as exc:
+        log.warning("최종 추천 AI 선별 실패, 규칙 기반 폴백으로 대체합니다: %s", exc)
+        selection = _heuristic_selection(flat_candidates, universe_by_ticker)
+        degraded = True
 
     sentiment_map = sentiment_stage.compute_symbol_sentiment(marketaux_articles)
     candidates_by_ticker = {c["ticker"]: c for c in flat_candidates}
@@ -94,4 +172,4 @@ def select_and_enrich(
 
             recommendations.append(rec)
 
-    return selection.get("market_context", ""), recommendations
+    return selection.get("market_context", ""), recommendations, degraded

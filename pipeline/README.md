@@ -126,7 +126,7 @@ python run_pipeline.py --dry-run --date 2026-08-04 --hour 19
 | 파일/디렉터리 | 역할 |
 |---|---|
 | `config.py` | 환경변수 로딩 + methodology.html 파라미터 |
-| `ai_client.py` | Claude 호출 추상화 (CLI/API 전환, 호출 예산 20회) |
+| `ai_client.py` | Claude 호출 추상화 (CLI/API 전환, JSON 파싱 실패 시 최대 3회 재시도, 호출 예산 26회) |
 | `collectors/` | Stage 1: Naver/Marketaux 뉴스 수집 |
 | `processing/clean.py` | Stage 2: 전처리/필터링 |
 | `processing/classify.py` | Stage 3: AI 기사 분류 |
@@ -143,9 +143,16 @@ python run_pipeline.py --dry-run --date 2026-08-04 --hour 19
 
 - **`claude` CLI를 찾을 수 없다는 오류**: Pi에 Claude Code CLI가 설치되어 있는지 확인
   (`which claude`), 또는 `.env`의 `AI_BACKEND=api`로 전환.
-- **Claude 호출 예산 초과 오류**: 기사 수가 비정상적으로 많거나 배치가 재시도를 반복하는
-  경우입니다. `MAX_CLAUDE_CALLS`를 늘리기보다 원인(API 응답 형식 오류 등)을 먼저 확인하세요.
-  예산 초과 시 파이프라인은 리포트를 저장하지 않고 안전하게 중단됩니다.
+- **Claude JSON 파싱 실패 (`Extra data`, `Expecting value` 등)**: 응답이 ```` ```json ... ``` ````
+  코드펜스 뒤에 설명 텍스트를 덧붙이거나 형식을 어길 때 발생합니다. `ai_client.call_claude_json`이
+  같은 프롬프트로 최대 3회까지 자동 재시도하므로 대부분 자연 복구됩니다. 6단계(최종 추천 선별)는
+  재시도까지 모두 실패하면 예외를 던지는 대신 `recommend._heuristic_selection`으로 넘어가
+  후보 신뢰도 기준 규칙 기반 선별로 대체하고, 저장된 리포트에 `selectionDegraded: true`를 남깁니다.
+  (다른 단계는 여전히 재시도 실패 시 파이프라인을 중단합니다.)
+- **Claude 호출 예산 초과 오류**: 기사 수가 비정상적으로 많거나 배치가 파싱 재시도를 반복하는
+  경우입니다. `MAX_CLAUDE_CALLS`(기본 26 = 정상 호출분 + 재시도 여유분)를 늘리기보다 원인(API 응답
+  형식 오류 등)을 먼저 확인하세요. 예산 초과 시 파이프라인은 리포트를 저장하지 않고 안전하게
+  중단됩니다.
 - **yfinance가 일부 종목 데이터를 못 가져옴**: 해당 종목은 이번 회차 추천에서 자동 제외됩니다
   (`recommend.py`). 반복되면 해당 티커의 야후파이낸스 심볼 표기를 확인하세요.
 - **MongoDB 연결 실패**: Atlas Network Access에 Pi의 현재 공인 IP가 허용되어 있는지, 비밀번호에

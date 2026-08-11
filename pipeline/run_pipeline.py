@@ -116,9 +116,11 @@ def run(target_date: date, hour: int, dry_run: bool) -> None:
 
     # Stage 6 (+5b 기술분석, +S 감성분석은 내부에서 병합)
     log.info("[6/7] 최종 추천 선별 + 기술/감성 병합")
-    market_context, recommendations = recommend_stage.select_and_enrich(
+    market_context, recommendations, degraded = recommend_stage.select_and_enrich(
         flat_candidates, universe_by_ticker, marketaux_articles
     )
+    if degraded:
+        log.warning("  AI 최종 선별 실패 — 규칙 기반 폴백으로 대체된 리포트입니다.")
     log.info("  최종 추천 %d종목 (claude 누적 호출 %d회)", len(recommendations), ai_client.calls_used())
 
     if len(recommendations) < 2:
@@ -131,6 +133,7 @@ def run(target_date: date, hour: int, dry_run: bool) -> None:
         "marketContext": market_context,
         "recommendations": recommendations,
         "categorySummaries": category_summaries,
+        "selectionDegraded": degraded,
     }
     _save_local(run_dir, "recommendation.json", report)
 

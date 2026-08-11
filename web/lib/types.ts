@@ -63,6 +63,8 @@ export interface Report {
   marketContext: string;
   recommendations: Recommendation[]; // KR 5 + US 5
   categorySummaries: CategorySummary[];
+  /** true면 AI 최종 선별이 실패해 규칙 기반 폴백으로 대체된 리포트 (과거 문서엔 없음 → false 취급). */
+  selectionDegraded?: boolean;
 }
 
 export const CATEGORY_LABELS: Record<NewsCategory, string> = {
