@@ -1,5 +1,5 @@
 import type { Region, TechnicalSignal } from "@/lib/types";
-import { formatPrice, formatSignedPct } from "@/lib/format";
+import { formatPrice, formatSignedPct, formatCurrency } from "@/lib/format";
 
 const SIGNAL_STYLE: Record<TechnicalSignal["signal"], string> = {
   buy: "bg-red-50 text-red-600 border-red-200",
@@ -19,9 +19,19 @@ const TREND_LABEL: Record<TechnicalSignal["emaTrend"], string> = {
   neutral: "횡보",
 };
 
-function Stat({ label, value, tone }: { label: string; value: string; tone?: "up" | "down" }) {
+function Stat({
+  label,
+  value,
+  tone,
+  title,
+}: {
+  label: string;
+  value: string;
+  tone?: "up" | "down";
+  title?: string;
+}) {
   return (
-    <div className="flex flex-col gap-0.5">
+    <div className="flex flex-col gap-0.5" title={title}>
       <span className="text-[11px] text-slate-400">{label}</span>
       <span
         className={
@@ -43,6 +53,12 @@ export default function TechnicalBadges({
   region: Region;
 }) {
   const changeTone = technical.changePct > 0 ? "up" : technical.changePct < 0 ? "down" : undefined;
+  const currency = region === "US" ? "USD" : "KRW";
+  // MACD는 원화/달러 절대값 차이라 주가 수준에 따라 절대 크기가 천차만별이라, 다른 정규화된
+  // 지표들(RSI/볼린저밴드/거래량 등)과 나란히 볼 수 있게 현재가 대비 %로 환산해 보여준다.
+  // 원본 절대값은 hover 툴팁으로 확인 가능. 신호 판단 로직(_score_and_signal)은 부호만 쓰므로 영향 없음.
+  const macdPct = technical.price ? (technical.macd / technical.price) * 100 : 0;
+  const macdTone = technical.macd > 0 ? "up" : technical.macd < 0 ? "down" : undefined;
 
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
@@ -68,7 +84,12 @@ export default function TechnicalBadges({
       </div>
       <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
         <Stat label="RSI" value={technical.rsi.toFixed(1)} />
-        <Stat label="MACD" value={technical.macd.toFixed(2)} />
+        <Stat
+          label="MACD"
+          value={formatSignedPct(macdPct)}
+          tone={macdTone}
+          title={`MACD ${formatCurrency(technical.macd, currency)} / Signal ${formatCurrency(technical.macdSignal, currency)}`}
+        />
         <Stat
           label="볼린저밴드"
           value={`${(technical.bbPosition * 100).toFixed(0)}%`}
