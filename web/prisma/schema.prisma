@@ -99,3 +99,59 @@ model AppSetting {
   value     String
   updatedAt DateTime @updatedAt
 }
+
+// --- AI Investor (뉴스/지표 기반 반자동 장기 포트폴리오) ---
+// 기존 Holding/Transaction(수동 입력 포트폴리오)과는 의도적으로 완전히 분리된 테이블.
+// AI Investor가 운용하는 자금/종목은 여기서만 추적하며, 사람이 수동으로 넣는 보유종목과 섞이지 않는다.
+
+model InvestorHolding {
+  id           String                @id @default(cuid())
+  ticker       String                @unique
+  name         String
+  quantity     Float
+  avgPrice     Float
+  currency     String                @default("KRW")
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+  transactions InvestorTransaction[]
+}
+
+model InvestorTransaction {
+  id              String          @id @default(cuid())
+  holdingId       String
+  holding         InvestorHolding @relation(fields: [holdingId], references: [id], onDelete: Cascade)
+  type            String // "BUY" | "SELL"
+  quantity        Float
+  price           Float
+  proposalItemId  String? // 이 거래를 발생시킨 InvestorProposalItem.id (수동 개입과 구분하기 위한 추적용)
+  tossOrderId     String? // Phase C(실주문 연동) 이후 채워짐
+  executedAt      DateTime
+  createdAt       DateTime        @default(now())
+}
+
+// 주 1회 AI가 생성하는 리밸런싱 제안 1건 (편입/편출/비중조절 묶음).
+model InvestorProposal {
+  id            String                 @id @default(cuid())
+  weekOf        DateTime // 의사결정 기준 주(월요일 날짜)
+  status        String                 @default("PENDING") // "PENDING" | "APPROVED" | "REJECTED" | "EXECUTED" | "FAILED"
+  marketContext String // AI가 작성한 이번 주 판단 요약
+  degraded      Boolean                @default(false) // Claude 파싱/검증 실패로 빈 제안이 된 경우
+  createdAt     DateTime               @default(now())
+  decidedAt     DateTime? // 승인/거절 시각
+  items         InvestorProposalItem[]
+}
+
+model InvestorProposalItem {
+  id                String           @id @default(cuid())
+  proposalId        String
+  proposal          InvestorProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  ticker            String
+  name              String
+  action            String // "NEW_BUY" | "ADD" | "TRIM" | "EXIT" | "HOLD"
+  targetWeightPct   Float
+  currentWeightPct  Float
+  convictionScore   Int // 0~100
+  rationale         String // 편입/편출 근거 (AI 요약)
+  riskFlags         String[] @default([])
+  orderStatus       String           @default("NOT_EXECUTED") // "NOT_EXECUTED" | "FILLED" | "SKIPPED" | "FAILED" | "PLACED"(Phase C 실주문 접수중)
+}

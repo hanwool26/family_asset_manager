@@ -1,0 +1,17 @@
+[Unit]
+Description=AI Investor weekly rebalancing proposal pipeline (one-shot run)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=__USER__
+WorkingDirectory=__PIPELINE_DIR__
+Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:__EXTRA_PATH__"
+ExecStart=__PIPELINE_DIR__/venv/bin/python __PIPELINE_DIR__/run_ai_investor.py
+TimeoutStartSec=1800
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

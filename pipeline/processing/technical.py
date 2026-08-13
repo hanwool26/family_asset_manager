@@ -50,6 +50,16 @@ def _bollinger(close: pd.Series) -> tuple[pd.Series, pd.Series]:
     return middle, position.clip(-1.5, 1.5)
 
 
+def _annualized_volatility_pct(close: pd.Series) -> float | None:
+    """일간 수익률 표준편차를 연율화(%)한다. AI Investor의 변동성 역가중 사이징에 사용
+    (processing/investor_decide.py). 이미 받아둔 3개월 종가 시계열을 재사용해 추가 API 호출이 없다."""
+    returns = close.pct_change().dropna()
+    if len(returns) < 5:
+        return None
+    vol = float(returns.std() * (252 ** 0.5) * 100)
+    return round(vol, 2) if np.isfinite(vol) else None
+
+
 def _ema_trend(close: pd.Series) -> str:
     ema5 = close.ewm(span=config.EMA_PERIODS[0], adjust=False).mean().iloc[-1]
     ema20 = close.ewm(span=config.EMA_PERIODS[1], adjust=False).mean().iloc[-1]
@@ -152,6 +162,7 @@ def get_technical_signal(ticker: str, market: str) -> dict[str, Any] | None:
         "macdSignal": round(last_macd_signal, 2),
         "bbPosition": round(last_bb_position, 2),
         "volumeRatio": round(last_volume_ratio, 2),
+        "volatilityPct": _annualized_volatility_pct(close),
         "emaTrend": _ema_trend(close),
         "buyScore": buy_score,
         "sellScore": sell_score,

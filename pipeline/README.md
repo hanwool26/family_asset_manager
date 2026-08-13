@@ -137,7 +137,56 @@ python run_pipeline.py --dry-run --date 2026-08-04 --hour 19
 | `processing/recommend.py` | Stage 6: 최종 추천 선별 + 병합 |
 | `storage/mongo_writer.py` | Stage 7: MongoDB 저장 (365일 TTL) |
 | `run_pipeline.py` | 오케스트레이터 (CLI 진입점) |
+| `portfolio_client.py`, `run_portfolio_movers.py` | 보유종목 등락률 TOP5 뉴스 파이프라인 (주 파이프라인과 별개) |
+| `investor_client.py`, `processing/investor_decide.py`, `run_ai_investor.py` | AI Investor: 주 1회 반자동 장기 포트폴리오 리밸런싱 제안 (별개 파이프라인, 아래 참고) |
+| `storage/investor_signal_writer.py` | 보유종목 주간 signal/emaTrend 이력 저장 — 추세 기반 강제 손절 판단에 사용 |
+| `broker/toss_client.py` | 토스증권 Open API 클라이언트. 시세·개장일 조회만 구현됨 — 실주문(Phase C)은 정확한 스키마 확인 전까지 의도적으로 미구현 |
 | `systemd/`, `install.sh` | Pi 서비스 등록 |
+
+## 6. AI Investor (주 1회 반자동 장기 포트폴리오)
+
+`run_ai_investor.py`가 매주 월요일 08:00 KST(`ai-investor-decide.timer`)에 실행되어, 최근
+`INVESTOR_LOOKBACK_DAYS`일치 `reports` 컬렉션에서 국내 종목의 컨빅션 통계(연속 추천 등장 횟수 +
+최신 지표)를 뽑고, web 앱의 `/api/investor/state`에서 현재 보유종목/현금/리스크 설정(최대 종목수,
+종목당 비중 상한, 현금 버퍼)을 가져온 뒤 Claude CLI로 리밸런싱안을 만든다. LLM이 제안한 비중/종목수는
+`processing/investor_decide.enforce_constraints()`가 항상 사후 검증·클램프하며, 파싱/검증에 실패하면
+규칙기반 대체 매매안을 만들지 않고 빈 제안으로 안전 정지한다. 완성된 제안은
+`/api/investor/proposals`에 PENDING 상태로 제출되고, `/investor` 페이지에서 사람이 승인/거절한다.
+
+**중요**: 이번 구현 범위(Phase A+B)는 승인해도 실주문이 나가지 않는다. `broker/toss_client.py`는
+시세 조회(`GET /api/v1/prices`)와 개장일 조회(`GET /api/v1/market-calendar/KR`)만 구현되어 있고,
+계좌 조회/주문(Phase C)은 정확한 요청 스키마(`openapi.tossinvest.com/openapi-docs/latest/openapi.json`의
+`/api/v1/accounts`, `/api/v1/assets`, `/api/v1/orders`)를 확인한 뒤 별도로 구현해야 한다.
+`pipeline/.env`의 `AI_INVESTOR_LIVE_TRADING`이 `true`가 되기 전까지 `toss_client.place_order`는
+항상 예외를 던진다.
+
+**휴장일 처리**: 월요일이 국내 증시 휴장일이어도 `run_ai_investor.py`는 그대로 실행된다 — 이번
+범위는 제안만 만들 뿐 실주문을 내지 않으므로 막을 이유가 없고, 기술적 지표는 yfinance가 자동으로
+마지막 거래일 종가를 반환한다. 다만 `toss_client.is_trading_day()`로 확인해 휴장일이면 제안의
+`marketContext`에 안내 문구를 붙인다(확인 자체가 실패해도 파이프라인은 계속 진행). Phase C
+실행 엔진은 이 확인을 필수로 거쳐야 한다 — 휴장일에 주문을 내면 실패하거나 예상치 못하게
+처리될 수 있다.
+
+**장기 안정성을 위한 리스크 규칙** (모두 `processing/investor_decide.py`에서 LLM 출력과 무관하게
+코드로 강제됨):
+- **섹터 집중도 캡**(`maxSectorWeightPct`, 기본 40%): 섹터 비중 합계가 상한을 넘으면 그 섹터 내에서
+  비례 축소
+- **변동성 역가중 사이징**: 이번 배치(보유종목+후보) 변동성 중간값보다 변동성이 큰 종목은 종목당
+  비중 상한을 그만큼 더 깎음 (낮은 변동성 종목을 끌어올리진 않음)
+- **리밸런싱 밴드**(`rebalanceBandPct`, 기본 5%p): 목표비중과 현재비중 차이가 이 값 미만인 ADD/TRIM은
+  취소(HOLD) — 과매매·수수료·세금 낭비 방지. 신규편입(NEW_BUY)/완전편출(EXIT)엔 밴드 미적용
+- **추세 기반 강제 손절**(`INVESTOR_EXIT_AFTER_CONSECUTIVE_WEEKS`, 기본 3주): 보유종목이 N주 연속
+  매도신호 또는 하락추세를 기록하면 AI 판단과 무관하게 강제 EXIT (`storage/investor_signal_writer.py`가
+  주간 이력을 Mongo `investor_signal_history` 컬렉션에 쌓음)
+
+서킷브레이커(포트폴리오 손실률·시세 조회 실패율)는 승인 시점 페이퍼 트레이딩 실행 단계
+(`web/lib/investor-execution.ts`)에서 강제된다 — web 쪽 README/코드 참고.
+
+로컬 테스트:
+```bash
+python run_ai_investor.py --dry-run
+# pipeline/data/ai_investor/<그 주 월요일>.json 에 생성된 제안 확인
+```
 
 ## 5. 트러블슈팅
 

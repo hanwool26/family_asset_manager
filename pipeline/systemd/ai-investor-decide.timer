@@ -1,0 +1,13 @@
+[Unit]
+Description=Run AI Investor weekly rebalancing proposal every Monday 08:00 KST (07:30 리포트 이후, 09:00 개장 전)
+
+[Timer]
+# systemd >= 239 는 캘린더 표현식 끝에 타임존을 붙일 수 있음. 구버전이면
+# `sudo timedatectl set-timezone Asia/Seoul` 로 시스템 시간대를 맞춘 뒤
+# "Asia/Seoul" 부분을 지우고 사용하세요.
+OnCalendar=Mon 08:00 Asia/Seoul
+Persistent=true
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target

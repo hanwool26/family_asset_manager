@@ -39,7 +39,9 @@ else
 fi
 
 # 설치할 유닛 목록: 매크로 리포트(stock-analyzer) + 포트폴리오 등락률 TOP5 뉴스(KR/US)
-UNITS=(stock-analyzer portfolio-movers-kr portfolio-movers-us)
+# + AI Investor 주간 리밸런싱 제안(ai-investor-decide). ai-investor-decide는 제안만 생성/제출하며
+# Phase C(실주문 연동) 전까지는 실제 매매를 일으키지 않는다.
+UNITS=(stock-analyzer portfolio-movers-kr portfolio-movers-us ai-investor-decide)
 
 echo "==> systemd 유닛 생성 (${SYSTEMD_DIR})"
 for unit in "${UNITS[@]}"; do
@@ -65,7 +67,11 @@ echo "    systemctl list-timers | grep -E 'stock-analyzer|portfolio-movers'"
 echo "    sudo systemctl start stock-analyzer.service          # 지금 바로 1회 수동 실행"
 echo "    sudo systemctl start portfolio-movers-kr.service     # 포트폴리오 국내 리포트 수동 실행"
 echo "    sudo systemctl start portfolio-movers-us.service     # 포트폴리오 미국 리포트 수동 실행"
+echo "    sudo systemctl start ai-investor-decide.service      # AI Investor 주간 제안 수동 실행"
 echo "    journalctl -u stock-analyzer.service -f              # 실시간 로그"
 echo ""
 echo "==> $PIPELINE_DIR/.env 에 MONGODB_URI, NAVER_*, MARKETAUX_API_KEY, ANTHROPIC_API_KEY,"
 echo "    PORTFOLIO_API_URL, PIPELINE_API_TOKEN 을 채워 넣었는지 확인하세요."
+echo "    AI Investor는 여기에 더해 web/.env 쪽 Postgres에 InvestorHolding 등 테이블이 마이그레이션"
+echo "    되어 있어야 하며(web/prisma/migrations), 이번 범위에서는 TOSS_* 값이 비어 있어도 동작합니다"
+echo "    (Phase C 실주문 연동 전까지는 사용되지 않음)."

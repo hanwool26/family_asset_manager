@@ -68,6 +68,19 @@ PIPELINE_API_TOKEN = _env("PIPELINE_API_TOKEN")
 PORTFOLIO_MOVERS_TOP_N = _env_int("PORTFOLIO_MOVERS_TOP_N", 5)
 PORTFOLIO_NEWS_ARTICLES_PER_STOCK = _env_int("PORTFOLIO_NEWS_ARTICLES_PER_STOCK", 5)
 
+# --- AI Investor (뉴스/지표 기반 반자동 장기 포트폴리오, run_ai_investor.py) ---
+# 컨빅션 통계(연속 추천 여부 등)를 뽑을 때 조회할 reports 컬렉션의 과거 구간(일).
+INVESTOR_LOOKBACK_DAYS = _env_int("INVESTOR_LOOKBACK_DAYS", 14)
+# 보유종목이 이 횟수만큼 연속으로 매도신호(signal=="sell") 또는 하락추세(emaTrend=="down")를
+# 기록하면, AI(Claude) 판단과 무관하게 코드 레벨에서 강제 EXIT 처리한다 (추세 기반 손절).
+INVESTOR_EXIT_AFTER_CONSECUTIVE_WEEKS = _env_int("INVESTOR_EXIT_AFTER_CONSECUTIVE_WEEKS", 3)
+# 토스증권 Open API. Phase A+B(이번 범위)는 사용하지 않고, Phase C(실주문 연동)에서 pipeline/broker/toss_client.py가 사용한다.
+TOSS_CLIENT_ID = _env("TOSS_CLIENT_ID")
+TOSS_CLIENT_SECRET = _env("TOSS_CLIENT_SECRET")
+TOSS_ACCOUNT_ID = _env("TOSS_ACCOUNT_ID")
+# true가 되기 전까지는 toss_client가 실주문을 절대 내지 않는다 — Phase C 안전장치.
+AI_INVESTOR_LIVE_TRADING = _env("AI_INVESTOR_LIVE_TRADING", "false").lower() == "true"
+
 # --- 로컬 저장 ---
 PIPELINE_DATA_DIR = BASE_DIR / _env("PIPELINE_DATA_DIR", "./data")
 PIPELINE_DATA_RETENTION_DAYS = _env_int("PIPELINE_DATA_RETENTION_DAYS", 30)
