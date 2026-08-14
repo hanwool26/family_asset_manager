@@ -16,13 +16,26 @@ export async function getLatestPortfolioMoversReport(market: Region): Promise<Po
   return doc ? toReport(doc) : null;
 }
 
-/** Reports 탭 목록용 — 최신순, 시장 구분 없이 전체. */
+// 파이프라인(portfolio_movers_writer.py)이 시장별 최신 5일치만 보관하므로, 조회 쪽도 동일한
+// 상한을 명시적으로 걸어 UI가 항상 "시장별 최근 5일" 범위를 벗어나지 않도록 한다.
+const KEEP_DATES_PER_MARKET = 5;
+
+/** Reports 탭 목록용 — 시장별 최신 5일치를 각각 최신순으로 가져온다. */
 export async function listPortfolioMoversReports(): Promise<PortfolioMoversReport[]> {
   const collection = await getPortfolioMoversCollection();
   if (!collection) return [];
 
-  const docs = await collection.find({}).sort({ date: -1, market: 1 }).limit(100).toArray();
-  return docs.map(toReport);
+  const markets: Region[] = ["KR", "US"];
+  const perMarket = await Promise.all(
+    markets.map((market) =>
+      collection
+        .find({ market })
+        .sort({ generatedAt: -1 })
+        .limit(KEEP_DATES_PER_MARKET)
+        .toArray(),
+    ),
+  );
+  return perMarket.flat().map(toReport);
 }
 
 /** Reports 상세 페이지용 — 특정 시장/일자 리포트. */

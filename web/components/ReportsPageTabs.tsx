@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import type { PortfolioMoversReport, Report } from "@/lib/types";
+import type { PortfolioMoversReport, Region, Report } from "@/lib/types";
 import { formatReportTime } from "@/lib/format";
 
 const MARKET_LABEL: Record<string, string> = { KR: "국내", US: "미국" };
@@ -56,9 +56,7 @@ function MoversHistoryList({ reports }: { reports: PortfolioMoversReport[] }) {
             className="flex items-center justify-between gap-3 px-5 py-4 hover:bg-slate-50 transition-colors"
           >
             <div className="min-w-0 flex-1">
-              <div className="font-semibold text-slate-900">
-                {report.date} &middot; {MARKET_LABEL[report.market] ?? report.market}
-              </div>
+              <div className="font-semibold text-slate-900">{report.date}</div>
               <div className="text-xs text-slate-500 mt-0.5">
                 상승 {report.gainers.length}종목 &middot; 하락 {report.losers.length}종목
               </div>
@@ -79,6 +77,8 @@ export default function ReportsPageTabs({
   moversReports: PortfolioMoversReport[];
 }) {
   const [tab, setTab] = useState<Tab>("history");
+  const [market, setMarket] = useState<Region>("KR");
+  const marketReports = moversReports.filter((report) => report.market === market);
 
   return (
     <div>
@@ -113,9 +113,24 @@ export default function ReportsPageTabs({
       ) : (
         <section>
           <p className="text-sm text-slate-500 mb-6">
-            보유 종목 중 장마감 등락률 TOP5 상승/하락 종목의 뉴스 요약 리포트입니다 (국내 15:30 / 미국 05:00 기준).
+            보유 종목 중 장마감 등락률 TOP5 상승/하락 종목의 뉴스 요약 리포트입니다 (국내 15:30 / 미국 05:00 기준, 시장별 최근 5일치).
           </p>
-          <MoversHistoryList reports={moversReports} />
+          <div className="flex gap-1.5 mb-4">
+            {(["KR", "US"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setMarket(m)}
+                className={
+                  "rounded-full px-3 py-1 text-xs font-medium transition-colors " +
+                  (market === m ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200")
+                }
+              >
+                {MARKET_LABEL[m]}
+              </button>
+            ))}
+          </div>
+          <MoversHistoryList reports={marketReports} />
         </section>
       )}
     </div>
