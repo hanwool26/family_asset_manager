@@ -8,7 +8,6 @@ import InvestorSettingsDialog from "@/components/InvestorSettingsDialog";
 import { ensureTodayInvestorSnapshot } from "./actions";
 import { formatDateOnlyISO } from "@/lib/date";
 import { formatKrw } from "@/lib/format";
-import { computeInvestorPeriodReturns } from "@/lib/investor-performance";
 import { getInvestorSettings } from "@/lib/investor-settings";
 import { computeCashKrw, getLiveInvestorValuations } from "@/lib/investor-state";
 
@@ -42,7 +41,6 @@ export default async function InvestorPage() {
   // 실패해도 화면 렌더링 자체는 막지 않는다 — 다음 방문 때 다시 시도하면 된다.
   await ensureTodayInvestorSnapshot(totalValueKrw).catch(() => {});
 
-  const periodReturns = computeInvestorPeriodReturns(snapshots, totalValueKrw, settings.seedCapitalKrw);
   // 위에서 upsert한 오늘자 스냅샷을 다시 조회하는 대신, 이미 계산해둔 totalValueKrw로 오늘 포인트를 덧붙인다.
   const todayISO = formatDateOnlyISO(new Date());
   const pastTrendPoints = snapshots
@@ -94,7 +92,12 @@ export default async function InvestorPage() {
           </div>
         </div>
 
-        <InvestorPerformanceSection periodReturns={periodReturns} trendPoints={trendPoints} />
+        <InvestorPerformanceSection
+          snapshots={snapshots}
+          totalValueKrw={totalValueKrw}
+          seedCapitalKrw={settings.seedCapitalKrw}
+          trendPoints={trendPoints}
+        />
 
         <section>
           <h2 className="text-base font-bold text-slate-900 mb-3">이번 주 제안</h2>
