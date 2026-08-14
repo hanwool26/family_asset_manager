@@ -2,16 +2,20 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import BlurGate from "@/components/BlurGate";
 import InvestorHoldingsTable from "@/components/InvestorHoldingsTable";
+import InvestorPerformanceSection from "@/components/InvestorPerformanceSection";
 import InvestorProposalCard from "@/components/InvestorProposalCard";
 import InvestorSettingsDialog from "@/components/InvestorSettingsDialog";
+import { ensureTodayInvestorSnapshot } from "./actions";
+import { formatDateOnlyISO } from "@/lib/date";
 import { formatKrw } from "@/lib/format";
+import { computeInvestorPeriodReturns } from "@/lib/investor-performance";
 import { getInvestorSettings } from "@/lib/investor-settings";
 import { computeCashKrw, getLiveInvestorValuations } from "@/lib/investor-state";
 
 export const dynamic = "force-dynamic";
 
 export default async function InvestorPage() {
-  const [holdings, transactions, settings, proposals] = await Promise.all([
+  const [holdings, transactions, settings, proposals, snapshots] = await Promise.all([
     // 전량 매도(EXIT) 종목은 거래내역 보존을 위해 삭제하지 않고 quantity=0으로 남겨두므로
     // (web/lib/investor-execution.ts 참고) 화면에 표시할 현재 보유종목에선 걸러야 한다.
     prisma.investorHolding.findMany({ where: { quantity: { gt: 0 } }, orderBy: { createdAt: "asc" } }),
@@ -22,6 +26,7 @@ export default async function InvestorPage() {
       take: 5,
       include: { items: true },
     }),
+    prisma.investorSnapshot.findMany({ orderBy: { date: "asc" } }),
   ]);
 
   const [valuations, cashKrw] = await Promise.all([
@@ -32,6 +37,18 @@ export default async function InvestorPage() {
   const holdingsValueKrw = valuations.reduce((sum, h) => sum + h.valueKrw, 0);
   const totalValueKrw = cashKrw + holdingsValueKrw;
   const [latestProposal, ...pastProposals] = proposals;
+
+  // 기간별 수익률 계산의 기준값을 오늘 날짜로 쌓는다(하루 1건, 같은 날 재방문 시 최신값으로 갱신).
+  // 실패해도 화면 렌더링 자체는 막지 않는다 — 다음 방문 때 다시 시도하면 된다.
+  await ensureTodayInvestorSnapshot(totalValueKrw).catch(() => {});
+
+  const periodReturns = computeInvestorPeriodReturns(snapshots, totalValueKrw, settings.seedCapitalKrw);
+  // 위에서 upsert한 오늘자 스냅샷을 다시 조회하는 대신, 이미 계산해둔 totalValueKrw로 오늘 포인트를 덧붙인다.
+  const todayISO = formatDateOnlyISO(new Date());
+  const pastTrendPoints = snapshots
+    .filter((s) => formatDateOnlyISO(s.date) !== todayISO)
+    .map((s) => ({ date: formatDateOnlyISO(s.date), netWorth: s.totalValueKrw }));
+  const trendPoints = [...pastTrendPoints, { date: todayISO, netWorth: totalValueKrw }];
 
   return (
     <BlurGate>
@@ -76,6 +93,8 @@ export default async function InvestorPage() {
             </div>
           </div>
         </div>
+
+        <InvestorPerformanceSection periodReturns={periodReturns} trendPoints={trendPoints} />
 
         <section>
           <h2 className="text-base font-bold text-slate-900 mb-3">이번 주 제안</h2>

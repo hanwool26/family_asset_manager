@@ -61,17 +61,19 @@ export default function NetWorthTrendChart({
   series,
   onPointClick,
   selectedDate,
+  emptyMessage = "순자산 추이를 표시하려면 스냅샷이 2개 이상 필요합니다.",
 }: {
   series: TrendSeries[];
   onPointClick?: (date: string) => void;
   selectedDate?: string;
+  emptyMessage?: string;
 }) {
   const totalPoints = series.reduce((s, ser) => s + ser.points.length, 0);
 
   if (totalPoints < 2) {
     return (
       <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-400">
-        순자산 추이를 표시하려면 스냅샷이 2개 이상 필요합니다.
+        {emptyMessage}
       </div>
     );
   }

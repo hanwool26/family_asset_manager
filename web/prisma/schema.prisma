@@ -141,6 +141,15 @@ model InvestorProposal {
   items         InvestorProposalItem[]
 }
 
+// AI Investor 총 평가금액(현금+보유종목)의 일별 스냅샷. 기간별 수익률(1주/1개월/3개월) 계산의
+// 기준값으로 쓰인다. web/app/investor/actions.ts의 ensureTodayInvestorSnapshot이 /investor 페이지
+// 조회 시점마다 upsert하며, 위 Holding의 PortfolioSnapshot과 동일한 패턴이다.
+model InvestorSnapshot {
+  id            String   @id @default(cuid())
+  date          DateTime @unique
+  totalValueKrw Float
+}
+
 model InvestorProposalItem {
   id                String           @id @default(cuid())
   proposalId        String

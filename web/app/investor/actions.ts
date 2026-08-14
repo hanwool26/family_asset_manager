@@ -81,3 +81,17 @@ export async function updateInvestorSettings(formData: FormData): Promise<{ erro
   revalidatePath("/investor");
   return {};
 }
+
+// totalValueKrw는 호출부(AI Investor 페이지)에서 이미 계산한 실시간 평가값을 그대로 받는다.
+// 이 함수 내부에서 다시 시세를 조회하면 같은 요청 안에서 실시간 API를 중복 호출하게 된다.
+// web/app/portfolio/actions.ts의 ensureTodaySnapshot과 동일한 패턴(하루 1건, 같은 날 재조회 시 최신값으로 덮어씀).
+export async function ensureTodayInvestorSnapshot(totalValueKrw: number) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  await prisma.investorSnapshot.upsert({
+    where: { date: today },
+    update: { totalValueKrw },
+    create: { date: today, totalValueKrw },
+  });
+}
