@@ -79,8 +79,32 @@ npm run dev
    - `DATABASE_URL` (필수)
    - `ANTHROPIC_API_KEY` (선택 — 앱 내 설정 다이얼로그에서 대신 등록해도 됨)
    - `BASIC_AUTH_PASSWORD` (외부에 공개되는 URL이므로 강력 권장)
+   - `MONGODB_URI`, `PIPELINE_API_TOKEN` (라즈베리파이 파이프라인 연동용 — [pipeline/README.md](pipeline/README.md) 참고)
+   - `KAKAO_REST_API_KEY`, `KAKAO_CLIENT_SECRET` (선택 — 카카오톡 알림 연동용, 아래 참고)
 6. **Deploy**. 완료되면 `https://<project>.vercel.app` 주소로 PC/모바일 어디서나 접속할 수 있습니다.
 7. 이후 `main` 브랜치에 push할 때마다 Vercel이 자동으로 `prisma migrate deploy && next build`를 실행하며 재배포합니다.
+
+## 카카오톡 알림
+
+리포트 발행(하루 2회) / 보유종목 등락률 TOP5 리포트 발행 / AI Investor 승인 요청(주 1회)이 생길 때마다
+카카오톡 "나에게 보내기"로 알림을 받을 수 있습니다. 사업자등록·알림톡 심사 없이, 카카오 개발자
+콘솔에 개인 계정을 팀원으로 등록해두는 방식으로 동작합니다.
+
+1. [Kakao Developers](https://developers.kakao.com)에서 앱 생성 → 카카오 로그인 활성화 → 동의항목에서
+   "카카오톡 메시지 전송"(talk_message) 활성화.
+2. `카카오 로그인 > Redirect URI`에 `https://<배포도메인>/api/kakao/callback`(및 로컬 개발 시
+   `http://localhost:3000/api/kakao/callback`) 등록. `앱 설정 > 플랫폼 > Web`에도 동일 도메인 등록.
+3. 앱이 "개발중" 상태인 동안은 `앱 설정 > 팀 관리`에 등록된 카카오 계정만 로그인/발송 대상이 될 수
+   있습니다 — 알림 받을 가족 구성원의 카카오 계정 이메일을 팀원으로 초대.
+4. `web/.env`(로컬) 및 Vercel 환경변수에 `KAKAO_REST_API_KEY`(REST API 키), `KAKAO_CLIENT_SECRET`
+   (카카오 로그인 > 보안에서 발급, "사용함" 상태로 전환 필요) 등록.
+5. `web/lib/kakao.ts`의 `KAKAO_FAMILY_MEMBERS` 배열에 알림 받을 사람 이름을 등록 (기본값: 이한울 1명).
+6. 배포된 앱의 `/investor` 페이지 우측 상단 "카카오 알림" 버튼에서 각자 최초 1회 로그인 동의를 완료하면
+   그 뒤로는 자동 발송됩니다 (토큰은 DB의 `AppSetting` 테이블에 저장, 만료 시 자동 refresh).
+
+발행 지점: `pipeline/storage/mongo_writer.py`·`pipeline/storage/portfolio_movers_writer.py`(라즈베리파이,
+`pipeline/notify_client.py` 경유) / `web/app/api/investor/proposals/route.ts`(웹 앱, `web/lib/kakao.ts`
+경유). 카카오 발송 실패는 항상 로그만 남기고 삼켜서, 리포트 저장이나 제안 생성 자체를 막지 않습니다.
 
 ## 로드맵
 

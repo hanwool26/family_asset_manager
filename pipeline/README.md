@@ -138,6 +138,7 @@ python run_pipeline.py --dry-run --date 2026-08-04 --hour 19
 | `storage/mongo_writer.py` | Stage 7: MongoDB 저장 (365일 TTL) |
 | `run_pipeline.py` | 오케스트레이터 (CLI 진입점) |
 | `portfolio_client.py`, `run_portfolio_movers.py` | 보유종목 등락률 TOP5 뉴스 파이프라인 (주 파이프라인과 별개) |
+| `notify_client.py` | 리포트 발행 시 web의 `POST /api/notify/kakao`를 호출해 카카오톡 알림 발송(실제 발송/토큰 관리는 web 쪽 `web/lib/kakao.ts`가 전담, 여기선 실패해도 무시하고 계속 진행). 루트 [README.md](../README.md#카카오톡-알림) 참고 |
 | `investor_client.py`, `processing/investor_decide.py`, `run_ai_investor.py` | AI Investor: 주 1회 반자동 장기 포트폴리오 리밸런싱 제안 (별개 파이프라인, 아래 참고) |
 | `storage/investor_signal_writer.py` | 보유종목 주간 signal/emaTrend 이력 저장 — 추세 기반 강제 손절 판단에 사용 |
 | `broker/toss_client.py` | 토스증권 Open API 클라이언트. 시세·개장일 조회만 구현됨 — 실주문(Phase C)은 정확한 스키마 확인 전까지 의도적으로 미구현 |

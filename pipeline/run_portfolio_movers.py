@@ -23,6 +23,7 @@ import requests
 
 import ai_client
 import config
+import notify_client
 import portfolio_client
 from collectors import marketaux_news, naver_news
 from storage import portfolio_movers_writer
@@ -158,6 +159,20 @@ def run(market: str, target_date: date, dry_run: bool) -> None:
     else:
         portfolio_movers_writer.save_report(report)
         log.info("MongoDB portfolio_movers_reports 컬렉션에 저장 완료 (%s, %s)", market, report["date"])
+
+        market_label = "🇰🇷 국내" if market == "KR" else "🇺🇸 해외"
+        top_gainer = gainers[0] if gainers else None
+        top_loser = losers[0] if losers else None
+        parts = [f"{market_label} 보유종목 등락률 TOP5 리포트가 발행됐어요."]
+        if top_gainer:
+            parts.append(f"상승 1위 {top_gainer['name']} {top_gainer['changePct']:+.1f}%")
+        if top_loser:
+            parts.append(f"하락 1위 {top_loser['name']} {top_loser['changePct']:+.1f}%")
+        notify_client.notify(
+            " ".join(parts),
+            web_url=f"{config.PORTFOLIO_API_URL}/reports/movers/{market}/{report['date']}",
+            button_title="리포트 보기",
+        )
 
     log.info("=== 파이프라인 완료 ===")
 

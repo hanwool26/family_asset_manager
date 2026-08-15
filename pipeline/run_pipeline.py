@@ -17,6 +17,7 @@ from datetime import date, datetime, timedelta
 
 import config
 import ai_client
+import notify_client
 from collectors import marketaux_news, naver_news
 from processing import candidates as candidates_stage
 from processing import classify as classify_stage
@@ -144,6 +145,11 @@ def run(target_date: date, hour: int, dry_run: bool) -> None:
     else:
         mongo_writer.save_report(report)
         log.info("  MongoDB reports 컬렉션에 저장 완료 (%s %02d:%02d)", report["date"], report["hour"], report["minute"])
+        notify_client.notify(
+            f"📊 {report['date']} {hour}시 리포트가 발행됐어요.",
+            web_url=f"{config.PORTFOLIO_API_URL}/reports/{report['date']}/{report['hour']}",
+            button_title="리포트 보기",
+        )
 
     log.info("=== 파이프라인 완료 (claude 총 호출 %d회) ===", ai_client.calls_used())
 

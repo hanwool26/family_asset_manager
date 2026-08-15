@@ -5,16 +5,18 @@ import InvestorHoldingsTable from "@/components/InvestorHoldingsTable";
 import InvestorPerformanceSection from "@/components/InvestorPerformanceSection";
 import InvestorProposalCard from "@/components/InvestorProposalCard";
 import InvestorSettingsDialog from "@/components/InvestorSettingsDialog";
+import KakaoNotifySettingsDialog from "@/components/KakaoNotifySettingsDialog";
 import { ensureTodayInvestorSnapshot } from "./actions";
 import { formatDateOnlyISO } from "@/lib/date";
 import { formatKrw } from "@/lib/format";
 import { getInvestorSettings } from "@/lib/investor-settings";
 import { computeCashKrw, getLiveInvestorValuations } from "@/lib/investor-state";
+import { getKakaoConnectionStatus, isKakaoConfigured } from "@/lib/kakao";
 
 export const dynamic = "force-dynamic";
 
 export default async function InvestorPage() {
-  const [holdings, transactions, settings, proposals, snapshots] = await Promise.all([
+  const [holdings, transactions, settings, proposals, snapshots, kakaoStatus] = await Promise.all([
     // 전량 매도(EXIT) 종목은 거래내역 보존을 위해 삭제하지 않고 quantity=0으로 남겨두므로
     // (web/lib/investor-execution.ts 참고) 화면에 표시할 현재 보유종목에선 걸러야 한다.
     prisma.investorHolding.findMany({ where: { quantity: { gt: 0 } }, orderBy: { createdAt: "asc" } }),
@@ -26,6 +28,7 @@ export default async function InvestorPage() {
       include: { items: true },
     }),
     prisma.investorSnapshot.findMany({ orderBy: { date: "asc" } }),
+    getKakaoConnectionStatus(),
   ]);
 
   const [valuations, cashKrw] = await Promise.all([
@@ -65,6 +68,7 @@ export default async function InvestorPage() {
             >
               📖 전략 설명
             </Link>
+            <KakaoNotifySettingsDialog configured={isKakaoConfigured()} status={kakaoStatus} />
             <InvestorSettingsDialog settings={settings} />
           </div>
         </div>

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { notifyFamily } from "@/lib/kakao";
 
 export const dynamic = "force-dynamic";
 
@@ -91,6 +92,13 @@ export async function POST(request: NextRequest) {
     },
     select: { id: true },
   });
+
+  // 카카오 알림은 실패해도 제안 저장 자체는 이미 끝난 뒤라 응답에 영향 없음(notifyFamily 내부에서 삼킴).
+  const buyCount = body.items.filter((item) => item.action !== "HOLD").length;
+  await notifyFamily(
+    `📈 AI Investor 새 리밸런싱 제안이 도착했어요 (${body.weekOf} 기준, ${buyCount}건 매매 검토 필요). 앱에서 승인/거절해주세요.`,
+    { webUrl: `${request.nextUrl.origin}/investor`, buttonTitle: "제안 확인하기" }
+  );
 
   return NextResponse.json({ id: proposal.id }, { status: 201 });
 }
