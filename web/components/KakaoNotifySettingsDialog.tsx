@@ -46,17 +46,20 @@ export default function KakaoNotifySettingsDialog({ configured, status }: KakaoN
               <ul className="space-y-1.5">
                 {members.map((member) => (
                   <li key={member} className="flex items-center justify-between text-sm">
-                    <span className="text-slate-700">{member}</span>
-                    {status[member] ? (
-                      <span className="text-xs font-medium text-emerald-600">연동됨</span>
-                    ) : (
-                      <a
-                        href={`/api/kakao/authorize?member=${encodeURIComponent(member)}`}
-                        className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-blue-700"
-                      >
-                        연동하기
-                      </a>
-                    )}
+                    <span className="text-slate-700">
+                      {member}
+                      {status[member] && <span className="ml-1.5 text-xs font-medium text-emerald-600">연동됨</span>}
+                    </span>
+                    <a
+                      href={`/api/kakao/authorize?member=${encodeURIComponent(member)}`}
+                      className={
+                        status[member]
+                          ? "rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-500 hover:border-slate-400 hover:text-slate-700"
+                          : "rounded-md bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-blue-700"
+                      }
+                    >
+                      {status[member] ? "재연동" : "연동하기"}
+                    </a>
                   </li>
                 ))}
               </ul>

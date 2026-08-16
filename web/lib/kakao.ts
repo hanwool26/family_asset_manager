@@ -156,7 +156,10 @@ async function sendMemo(accessToken: string, text: string, link?: NotifyLink): P
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/x-www-form-urlencoded",
+      // charset 명시 없이 보내면 카카오 쪽에서 한글/이모지가 깨져서 수신될 수 있다
+      // (퍼센트 인코딩 자체는 UTF-8로 정확히 되어 있어도, 서버가 바이트를 디코딩할 때 어떤
+      // charset을 쓸지는 이 헤더로 판단하는 경우가 있음).
+      "Content-Type": "application/x-www-form-urlencoded;charset=utf-8",
     },
     body: new URLSearchParams({ template_object: JSON.stringify(templateObject) }).toString(),
   });
