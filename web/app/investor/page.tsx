@@ -8,7 +8,7 @@ import InvestorSettingsDialog from "@/components/InvestorSettingsDialog";
 import KakaoNotifySettingsDialog from "@/components/KakaoNotifySettingsDialog";
 import { ensureTodayInvestorSnapshot } from "./actions";
 import { formatDateOnlyISO } from "@/lib/date";
-import { formatKrw } from "@/lib/format";
+import { formatKrw, formatSignedKrw, formatSignedPct } from "@/lib/format";
 import { getInvestorSettings } from "@/lib/investor-settings";
 import { computeCashKrw, getLiveInvestorValuations } from "@/lib/investor-state";
 import { getKakaoConnectionStatus, isKakaoConfigured } from "@/lib/kakao";
@@ -37,6 +37,9 @@ export default async function InvestorPage() {
   ]);
 
   const holdingsValueKrw = valuations.reduce((sum, h) => sum + h.valueKrw, 0);
+  const holdingsCostKrw = valuations.reduce((sum, h) => sum + h.costKrw, 0);
+  const unrealizedPnlKrw = holdingsValueKrw - holdingsCostKrw;
+  const unrealizedPnlPct = holdingsCostKrw > 0 ? (unrealizedPnlKrw / holdingsCostKrw) * 100 : 0;
   const totalValueKrw = cashKrw + holdingsValueKrw;
   const [latestProposal, ...pastProposals] = proposals;
 
@@ -73,10 +76,21 @@ export default async function InvestorPage() {
           </div>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="text-xs text-slate-400 mb-1">총 평가금액 (현금 포함)</div>
             <div className="text-2xl font-bold text-slate-900">{formatKrw(totalValueKrw)}</div>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="text-xs text-slate-400 mb-1">보유종목 평가손익</div>
+            <div
+              className={`text-2xl font-bold ${
+                unrealizedPnlKrw > 0 ? "text-red-600" : unrealizedPnlKrw < 0 ? "text-blue-600" : "text-slate-900"
+              }`}
+            >
+              {formatSignedKrw(unrealizedPnlKrw)}
+            </div>
+            <div className="text-[11px] text-slate-400 mt-0.5">{formatSignedPct(unrealizedPnlPct)}</div>
           </div>
           <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="text-xs text-slate-400 mb-1">가용 현금</div>

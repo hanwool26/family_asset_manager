@@ -6,7 +6,7 @@ import HoldingsTable from "@/components/HoldingsTable";
 import CategoryPieChart from "@/components/CategoryPieChart";
 import PortfolioMoversSection from "@/components/PortfolioMoversSection";
 import BlurGate from "@/components/BlurGate";
-import { formatKrw } from "@/lib/format";
+import { formatKrw, formatSignedKrw, formatSignedPct } from "@/lib/format";
 import { formatDateTimeKorean } from "@/lib/date";
 import { getLiveHoldingValuations } from "@/lib/portfolio-valuation";
 import { getLatestPortfolioMoversReport } from "@/lib/portfolio-movers-reports";
@@ -26,6 +26,8 @@ export default async function PortfolioPage() {
 
   const totalValueKrw = rows.reduce((sum, h) => sum + h.valueKrw, 0);
   const totalCostKrw = rows.reduce((sum, h) => sum + h.costKrw, 0);
+  const totalProfitKrw = totalValueKrw - totalCostKrw;
+  const totalReturnPct = totalCostKrw > 0 ? (totalProfitKrw / totalCostKrw) * 100 : 0;
   await ensureTodaySnapshot(totalValueKrw, totalCostKrw);
 
   const allocationGroups = ["KR", "US"]
@@ -53,10 +55,21 @@ export default async function PortfolioPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="text-xs text-slate-400 mb-1">총 평가금액 (KRW 환산)</div>
           <div className="text-2xl font-bold text-slate-900">{formatKrw(totalValueKrw)}</div>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="text-xs text-slate-400 mb-1">총 평가손익</div>
+          <div
+            className={`text-2xl font-bold ${
+              totalProfitKrw > 0 ? "text-red-600" : totalProfitKrw < 0 ? "text-blue-600" : "text-slate-900"
+            }`}
+          >
+            {formatSignedKrw(totalProfitKrw)}
+          </div>
+          <div className="text-[11px] text-slate-400 mt-0.5">{formatSignedPct(totalReturnPct)}</div>
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="text-xs text-slate-400 mb-1">보유 종목 수</div>

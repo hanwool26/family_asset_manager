@@ -1,5 +1,5 @@
 import type { InvestorHoldingValuation } from "@/lib/investor-state";
-import { formatCurrency, formatKrw, formatSignedPct } from "@/lib/format";
+import { formatCurrency, formatKrw, formatSignedKrw, formatSignedPct } from "@/lib/format";
 
 // 포트폴리오 탭의 HoldingsTable과 달리 수동 추가/삭제 UI가 없다 — AI Investor 종목은
 // 오직 승인된 InvestorProposal 집행(Phase C)을 통해서만 편입/편출된다.
@@ -29,7 +29,7 @@ export default function InvestorHoldingsTable({
               <th className="px-4 py-2.5 font-medium text-right">시세/평단가</th>
               <th className="px-4 py-2.5 font-medium text-right">매입/평가금액</th>
               <th className="px-4 py-2.5 font-medium text-right">비중</th>
-              <th className="px-4 py-2.5 font-medium text-right">수익률</th>
+              <th className="px-4 py-2.5 font-medium text-right">평가손익</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -64,7 +64,8 @@ export default function InvestorHoldingsTable({
                       h.returnPct > 0 ? "text-red-600" : h.returnPct < 0 ? "text-blue-600" : "text-slate-500"
                     }`}
                   >
-                    {formatSignedPct(h.returnPct)}
+                    <div className="text-[11px] font-normal">{formatSignedKrw(h.valueKrw - h.costKrw)}</div>
+                    <div>{formatSignedPct(h.returnPct)}</div>
                   </td>
                 </tr>
               );

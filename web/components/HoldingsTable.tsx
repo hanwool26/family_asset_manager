@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import type { Holding } from "@/app/generated/prisma/client";
 import { addTransaction, deleteHolding } from "@/app/portfolio/actions";
-import { formatCurrency, formatKrw, formatSignedPct } from "@/lib/format";
+import { formatCurrency, formatKrw, formatSignedKrw, formatSignedPct } from "@/lib/format";
 import ConfirmDeleteButton from "./ConfirmDeleteButton";
 
 type HoldingRow = Holding & { valueKrw: number; costKrw: number; returnPct: number; isLive: boolean; livePrice: number | null };
@@ -15,7 +15,7 @@ const COLUMNS: { key: SortKey; label: string; align: "left" | "right"; defaultDi
   { key: "avgPrice", label: "시세/평단가", align: "right", defaultDir: "desc" },
   { key: "valueKrw", label: "매입/평가금액", align: "right", defaultDir: "desc" },
   { key: "weightPct", label: "비중", align: "right", defaultDir: "desc" },
-  { key: "returnPct", label: "수익률", align: "right", defaultDir: "desc" },
+  { key: "returnPct", label: "평가손익", align: "right", defaultDir: "desc" },
 ];
 
 function TransactionRow({ holding }: { holding: Holding }) {
@@ -193,7 +193,8 @@ export default function HoldingsTable({ holdings }: { holdings: HoldingRow[] }) 
                     h.returnPct > 0 ? "text-red-600" : h.returnPct < 0 ? "text-blue-600" : "text-slate-500"
                   }`}
                 >
-                  {formatSignedPct(h.returnPct)}
+                  <div className="text-[11px] font-normal">{formatSignedKrw(h.valueKrw - h.costKrw)}</div>
+                  <div>{formatSignedPct(h.returnPct)}</div>
                 </td>
                 <td className="px-4 py-3">
                   <TransactionRow holding={h} />
