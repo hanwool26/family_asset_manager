@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { saveSnapshot } from "@/app/assets/actions";
 import { DEFAULT_ASSET_CATEGORIES, DEFAULT_LIABILITY_CATEGORIES } from "@/lib/finance";
+import { formatAmountInput, sanitizeAmountInput } from "@/lib/format";
 
 const CUSTOM_CATEGORY = "__custom__";
 
@@ -22,6 +23,24 @@ export interface InitialSnapshotItem {
 }
 
 const emptyRow = (): Row => ({ category: "", name: "", amount: "", note: "" });
+
+/** 콤마 등을 제외한 "의미 있는" 문자(숫자·부호·소수점) 개수를 센다. */
+function countSignificantChars(text: string): number {
+  return (text.match(/[0-9.-]/g) ?? []).length;
+}
+
+/** 포맷된 문자열에서 앞쪽 의미 있는 문자를 n개 지난 지점의 커서 위치를 찾는다. */
+function caretAfterSignificantChars(text: string, n: number): number {
+  if (n <= 0) return 0;
+  let count = 0;
+  for (let idx = 0; idx < text.length; idx++) {
+    if (/[0-9.-]/.test(text[idx])) {
+      count++;
+      if (count >= n) return idx + 1;
+    }
+  }
+  return text.length;
+}
 
 function toRows(items: InitialSnapshotItem[], type: "ASSET" | "LIABILITY"): Row[] {
   const rows = items
@@ -60,6 +79,18 @@ function RowsEditor({
   }
   function removeRow(i: number) {
     setRows(rows.filter((_, idx) => idx !== i));
+  }
+  function handleAmountChange(i: number, e: React.ChangeEvent<HTMLInputElement>) {
+    const input = e.target;
+    const caret = input.selectionStart ?? input.value.length;
+    const significantBeforeCaret = countSignificantChars(input.value.slice(0, caret));
+    const sanitized = sanitizeAmountInput(input.value);
+    updateRow(i, "amount", sanitized);
+    requestAnimationFrame(() => {
+      const formatted = formatAmountInput(sanitized);
+      const newCaret = caretAfterSignificantChars(formatted, significantBeforeCaret);
+      input.setSelectionRange(newCaret, newCaret);
+    });
   }
 
   return (
@@ -113,11 +144,12 @@ function RowsEditor({
                 className="col-span-2 rounded-md border border-slate-300 px-2 py-1.5 text-xs sm:col-span-3"
               />
               <input
-                type="number"
+                type="text"
+                inputMode="decimal"
                 placeholder="금액"
-                value={row.amount}
-                onChange={(e) => updateRow(i, "amount", e.target.value)}
-                className="rounded-md border border-slate-300 px-2 py-1.5 text-xs sm:col-span-3"
+                value={formatAmountInput(row.amount)}
+                onChange={(e) => handleAmountChange(i, e)}
+                className="rounded-md border border-slate-300 px-2 py-1.5 text-xs text-right tabular-nums sm:col-span-3"
               />
               <input
                 placeholder="비고"

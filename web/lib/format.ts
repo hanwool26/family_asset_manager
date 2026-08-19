@@ -32,3 +32,30 @@ export function formatCurrency(value: number, currency: string): string {
 export function formatReportTime(hour: number, minute?: number): string {
   return `${String(hour).padStart(2, "0")}:${String(minute ?? 0).padStart(2, "0")}`;
 }
+
+/**
+ * 금액 입력칸용 원시값(콤마 없는 숫자 문자열, 입력 도중의 "-"·"." 포함 가능) -> 화면 표시값 변환.
+ * 정수부에만 천단위 콤마를 붙이고 소수부/부호는 그대로 유지한다.
+ */
+export function formatAmountInput(raw: string): string {
+  if (!raw) return "";
+  const sign = raw.startsWith("-") ? "-" : "";
+  const unsigned = sign ? raw.slice(1) : raw;
+  const [intPart, ...rest] = unsigned.split(".");
+  const digits = intPart.replace(/^0+(?=\d)/, "");
+  const withCommas = digits.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  const decimal = rest.length > 0 ? `.${rest.join("")}` : "";
+  return `${sign}${withCommas}${decimal}`;
+}
+
+/** 사용자가 입력한 문자열(콤마 등 포맷 문자 포함 가능)에서 순수 숫자 원시값만 남긴다. 부호는 맨 앞, 소수점은 1개까지만 허용. */
+export function sanitizeAmountInput(value: string): string {
+  const negative = value.trim().startsWith("-");
+  const stripped = value.replace(/[^0-9.]/g, "");
+  const firstDot = stripped.indexOf(".");
+  const digitsOnly =
+    firstDot === -1
+      ? stripped
+      : stripped.slice(0, firstDot + 1) + stripped.slice(firstDot + 1).replace(/\./g, "");
+  return (negative ? "-" : "") + digitsOnly;
+}
