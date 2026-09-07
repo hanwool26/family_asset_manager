@@ -5,7 +5,7 @@ import type { InvestorProposal, InvestorProposalItem } from "@/app/generated/pri
 import { approveProposal, rejectProposal } from "@/app/investor/actions";
 import { formatDateOnlyKorean } from "@/lib/date";
 
-type ProposalWithItems = InvestorProposal & { items: InvestorProposalItem[] };
+export type ProposalWithItems = InvestorProposal & { items: InvestorProposalItem[] };
 
 const ACTION_LABEL: Record<string, string> = {
   NEW_BUY: "신규 편입",

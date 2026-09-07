@@ -4,6 +4,7 @@ import BlurGate from "@/components/BlurGate";
 import InvestorHoldingsTable from "@/components/InvestorHoldingsTable";
 import InvestorPerformanceSection from "@/components/InvestorPerformanceSection";
 import InvestorProposalCard from "@/components/InvestorProposalCard";
+import InvestorProposalHistoryDialog from "@/components/InvestorProposalHistoryDialog";
 import InvestorSettingsDialog from "@/components/InvestorSettingsDialog";
 import KakaoNotifySettingsDialog from "@/components/KakaoNotifySettingsDialog";
 import { ensureTodayInvestorSnapshot } from "./actions";
@@ -24,7 +25,8 @@ export default async function InvestorPage() {
     getInvestorSettings(),
     prisma.investorProposal.findMany({
       orderBy: { createdAt: "desc" },
-      take: 5,
+      // 이번 주 제안(1건) + 히스토리 모달에 노출할 지난 제안 최대 5건.
+      take: 6,
       include: { items: true },
     }),
     prisma.investorSnapshot.findMany({ orderBy: { date: "asc" } }),
@@ -129,21 +131,20 @@ export default async function InvestorPage() {
           )}
         </section>
 
-        {pastProposals.length > 0 && (
-          <section>
-            <h2 className="text-base font-bold text-slate-900 mb-3">지난 제안</h2>
-            <div className="space-y-4">
-              {pastProposals.map((p) => (
-                <InvestorProposalCard key={p.id} proposal={p} />
-              ))}
-            </div>
-          </section>
-        )}
-
         <section>
           <h2 className="text-base font-bold text-slate-900 mb-3">보유 종목</h2>
           <InvestorHoldingsTable holdings={valuations} totalValueKrw={totalValueKrw} />
         </section>
+
+        {pastProposals.length > 0 && (
+          <section>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-base font-bold text-slate-900">지난 제안</h2>
+              <InvestorProposalHistoryDialog proposals={pastProposals.slice(0, 5)} />
+            </div>
+            <InvestorProposalCard proposal={pastProposals[0]} />
+          </section>
+        )}
       </div>
     </BlurGate>
   );
