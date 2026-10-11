@@ -23,6 +23,8 @@ const ACTION_TONE: Record<string, string> = {
   HOLD: "bg-slate-100 text-slate-500 border-slate-200",
 };
 
+const REGION_LABEL: Record<string, string> = { KR: "🇰🇷 한국", US: "🇺🇸 미국" };
+
 const STATUS_LABEL: Record<string, string> = {
   PENDING: "승인 대기",
   REJECTED: "거절됨",
@@ -49,7 +51,11 @@ export default function InvestorProposalCard({ proposal }: { proposal: ProposalW
     if (
       !window.confirm(
         "이 제안을 승인하면 오늘 시세로 즉시 모의 체결(페이퍼 트레이딩)됩니다. 아직 실제 토스 주문은 아니지만, " +
-          "AI Investor의 보유종목/현금에는 실제로 반영됩니다. 계속할까요?"
+          "AI Investor의 보유종목/현금에는 실제로 반영됩니다." +
+          (proposal.region === "US"
+            ? " 달러 현금이 부족하면 원화 대기자금에서 부족분이 현재 환율로 자동 환전됩니다."
+            : "") +
+          " 계속할까요?"
       )
     )
       return;
@@ -75,6 +81,7 @@ export default function InvestorProposalCard({ proposal }: { proposal: ProposalW
     <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-3">
         <div>
+          <span className="mr-1.5 text-[11px] font-semibold text-slate-400">{REGION_LABEL[proposal.region] ?? proposal.region}</span>
           <span className="text-sm font-semibold text-slate-900">
             {formatDateOnlyKorean(proposal.weekOf)} 기준 주간 제안
           </span>

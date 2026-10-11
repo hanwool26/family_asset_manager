@@ -22,10 +22,13 @@ def _headers() -> dict[str, str]:
 
 
 def fetch_state() -> dict[str, Any]:
-    """{holdings, cashKrw, settings} 를 가져온다.
+    """{markets, usdKrwRate, settings, holdings, cashKrw} 를 가져온다.
 
-    holdings: [{ticker, name, quantity, avgPrice, currency}]
-    settings: {seedCapitalKrw, maxPositions, maxWeightPct, cashBufferPct}
+    markets: {"KR"|"US": {currency, seedKrw, cash, holdings, (US만) usdCash, krwReserve}}
+      - cash는 슬리브 통화 기준 가용 현금 (KR=원, US=달러 현금 + 원화 대기자금의 현재 환율 환산)
+      - holdings: [{ticker, name, quantity, avgPrice, currency}]
+    settings: {seedCapitalKrw, usAllocationPct, maxPositions, maxWeightPct, cashBufferPct, ...}
+    holdings/cashKrw(최상위): 구버전 호환용 KR 슬리브 값
     """
     url = f"{config.PORTFOLIO_API_URL.rstrip('/')}/api/investor/state"
     resp = requests.get(url, headers=_headers(), timeout=15)
@@ -34,7 +37,7 @@ def fetch_state() -> dict[str, Any]:
 
 
 def submit_proposal(proposal: dict[str, Any]) -> str:
-    """proposal({weekOf, marketContext, degraded, items})을 제출하고 생성된 id를 반환한다.
+    """proposal({weekOf, region, marketContext, degraded, items})을 제출하고 생성된 id를 반환한다.
 
     items: [{ticker, name, action, targetWeightPct, currentWeightPct, convictionScore,
              rationale, riskFlags}]

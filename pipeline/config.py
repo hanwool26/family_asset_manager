@@ -40,9 +40,10 @@ ANTHROPIC_API_KEY = _env("ANTHROPIC_API_KEY")
 MAX_ARTICLES = _env_int("MAX_ARTICLES", 200)
 CLASSIFY_BATCH_SIZE = _env_int("CLASSIFY_BATCH_SIZE", 25)
 SUMMARY_ARTICLES_PER_CATEGORY = _env_int("SUMMARY_ARTICLES_PER_CATEGORY", 30)
-# 기본 20 (재시도 없이 1회씩 호출 시 필요한 수) + JSON 파싱 재시도용 여유분.
+# 기본 21 (재시도 없이 1회씩 호출 시 필요한 수 — 환율 분석 1회 포함) + JSON 파싱 재시도용 여유분.
 # ai_client.call_claude_json 은 파싱 실패 시 같은 프롬프트로 최대 2회 재시도한다.
-MAX_CLAUDE_CALLS = _env_int("MAX_CLAUDE_CALLS", 26)
+# 환율 분석(Stage 6b)은 리포트 저장 직전에 호출되며, 예산이 모자라면 리포트를 막지 않고 AI 판단만 생략된다.
+MAX_CLAUDE_CALLS = _env_int("MAX_CLAUDE_CALLS", 29)
 CLAUDE_TIMEOUT_SECONDS = _env_int("CLAUDE_TIMEOUT_SECONDS", 300)
 CLAUDE_CALL_INTERVAL_SECONDS = _env_float("CLAUDE_CALL_INTERVAL_SECONDS", 2.0)
 NAVER_RATE_LIMIT_SECONDS = _env_float("NAVER_RATE_LIMIT_SECONDS", 0.2)
@@ -93,6 +94,9 @@ NEWS_KEYWORDS = {
     "EVENT": ["감염병", "전쟁", "신기술", "리콜", "사고"],
     "TREND": ["AI", "2차전지", "고령화", "데이터센터", "신재생에너지"],
 }
+
+# Stage 6b 환율 분석(processing/fx_analysis.py)용 Naver 뉴스 검색 키워드. 메인 수집(NEWS_KEYWORDS)과 별도로 검색한다.
+FX_NEWS_KEYWORDS = ["원달러 환율", "외환시장 달러"]
 
 MARKETAUX_SYMBOL_GROUPS = {
     "반도체": ["NVDA", "AMD", "INTC", "TSM", "AVGO"],

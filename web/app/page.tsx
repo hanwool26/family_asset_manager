@@ -2,6 +2,7 @@ import { getLatestReport } from "@/lib/reports";
 import { formatReportTime } from "@/lib/format";
 import RecommendationTabs from "@/components/RecommendationTabs";
 import CategoryIssueCard from "@/components/CategoryIssueCard";
+import FxAnalysisCard from "@/components/FxAnalysisCard";
 
 // MongoDB에서 매번 최신 리포트를 읽어야 하므로 정적 프리렌더링을 막는다.
 // (누락 시 배포 시점 스냅샷으로 캐시되어 파이프라인이 새 리포트를 써도 반영되지 않음)
@@ -32,6 +33,11 @@ export default async function HomePage() {
         <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-sm text-slate-700 leading-relaxed">{report.marketContext}</p>
         </div>
+        {report.fxAnalysis && (
+          <div className="mt-4">
+            <FxAnalysisCard fx={report.fxAnalysis} />
+          </div>
+        )}
       </section>
 
       <section>

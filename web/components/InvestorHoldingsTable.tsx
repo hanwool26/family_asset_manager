@@ -1,14 +1,16 @@
 import type { InvestorHoldingValuation } from "@/lib/investor-state";
-import { formatCurrency, formatKrw, formatSignedKrw, formatSignedPct } from "@/lib/format";
+import { formatCurrency, formatKrw, formatSignedCurrency, formatSignedPct } from "@/lib/format";
 
 // 포트폴리오 탭의 HoldingsTable과 달리 수동 추가/삭제 UI가 없다 — AI Investor 종목은
 // 오직 승인된 InvestorProposal 집행(Phase C)을 통해서만 편입/편출된다.
+// 금액은 종목 통화(KR=원, US=달러) 기준으로 표시하고, 미국 종목은 원화 환산액을 함께 보여준다.
+// 비중의 분모는 해당 시장 슬리브의 총 평가금액(현금 포함)이다.
 export default function InvestorHoldingsTable({
   holdings,
-  totalValueKrw,
+  sleeveTotalKrw,
 }: {
   holdings: InvestorHoldingValuation[];
-  totalValueKrw: number;
+  sleeveTotalKrw: number;
 }) {
   if (holdings.length === 0) {
     return (
@@ -34,7 +36,8 @@ export default function InvestorHoldingsTable({
           </thead>
           <tbody className="divide-y divide-slate-100">
             {holdings.map((h) => {
-              const weightPct = totalValueKrw > 0 ? (h.valueKrw / totalValueKrw) * 100 : 0;
+              const weightPct = sleeveTotalKrw > 0 ? (h.valueKrw / sleeveTotalKrw) * 100 : 0;
+              const isUsd = h.currency === "USD";
               return (
                 <tr key={h.id} className="align-top">
                   <td className="px-4 py-3">
@@ -42,7 +45,7 @@ export default function InvestorHoldingsTable({
                       {h.name}
                       {!h.isLive && (
                         <span
-                          title="실시간 시세 조회에 실패해 마지막 등록값을 표시합니다."
+                          title="실시간 시세 조회에 실패해 평단가 기준으로 표시합니다."
                           className="inline-block h-1.5 w-1.5 rounded-full bg-slate-300"
                         />
                       )}
@@ -55,8 +58,9 @@ export default function InvestorHoldingsTable({
                     <div>{formatCurrency(h.avgPrice, h.currency)}</div>
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums font-semibold">
-                    <div className="text-[11px] font-normal text-slate-400">{formatKrw(h.costKrw)}</div>
-                    <div>{formatKrw(h.valueKrw)}</div>
+                    <div className="text-[11px] font-normal text-slate-400">{formatCurrency(h.costNative, h.currency)}</div>
+                    <div>{formatCurrency(h.valueNative, h.currency)}</div>
+                    {isUsd && <div className="text-[11px] font-normal text-slate-400">≈ {formatKrw(h.valueKrw)}</div>}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-slate-600">{weightPct.toFixed(1)}%</td>
                   <td
@@ -64,7 +68,7 @@ export default function InvestorHoldingsTable({
                       h.returnPct > 0 ? "text-red-600" : h.returnPct < 0 ? "text-blue-600" : "text-slate-500"
                     }`}
                   >
-                    <div className="text-[11px] font-normal">{formatSignedKrw(h.valueKrw - h.costKrw)}</div>
+                    <div className="text-[11px] font-normal">{formatSignedCurrency(h.valueNative - h.costNative, h.currency)}</div>
                     <div>{formatSignedPct(h.returnPct)}</div>
                   </td>
                 </tr>

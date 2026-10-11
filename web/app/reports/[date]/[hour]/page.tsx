@@ -3,6 +3,7 @@ import { getReport } from "@/lib/reports";
 import { formatReportTime } from "@/lib/format";
 import RecommendationTabs from "@/components/RecommendationTabs";
 import CategoryIssueCard from "@/components/CategoryIssueCard";
+import FxAnalysisCard from "@/components/FxAnalysisCard";
 
 // MongoDB에서 매번 최신 리포트를 읽어야 하므로 정적 프리렌더링을 막는다.
 export const dynamic = "force-dynamic";
@@ -28,6 +29,11 @@ export default async function ReportDetailPage({
         <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm mt-3">
           <p className="text-sm text-slate-700 leading-relaxed">{report.marketContext}</p>
         </div>
+        {report.fxAnalysis && (
+          <div className="mt-4">
+            <FxAnalysisCard fx={report.fxAnalysis} />
+          </div>
+        )}
       </section>
 
       <section>

@@ -4,6 +4,11 @@
 등장 횟수 + 최신 지표)를 뽑고, 현재 보유종목과 함께 Claude CLI에 넘겨 목표 비중 조정안을
 JSON으로 받는다.
 
+시장(region)별로 독립된 슬리브를 운용한다 — KR(원화)과 US(달러) 각각 decide()를 따로 호출하며,
+비중의 분모·현금·리스크 상한은 전부 그 슬리브 기준이다. US 슬리브 현금(state.markets.US.cash)은
+달러 현금 + 원화 대기자금(현재 환율 환산)이며, 프롬프트에는 리포트의 최신 환율 분석(fxAnalysis)을
+참고 컨텍스트로 함께 넣는다.
+
 **중요**: LLM이 제안한 target_weight_pct/종목수는 절대 그대로 신뢰하지 않는다.
 `enforce_constraints()`가 종목당/섹터당 비중상한·변동성 역가중·최대 종목수·현금버퍼를 코드
 레벨에서 강제 클램프한 뒤에만 저장 대상이 된다. 그 뒤에도 리밸런싱 밴드(너무 작은 조정은
@@ -34,7 +39,17 @@ _VALID_ACTIONS = {"NEW_BUY", "ADD", "TRIM", "EXIT", "HOLD"}
 _MIN_APPEARANCES_FOR_CANDIDATE = 2
 _MAX_CANDIDATES_IN_PROMPT = 20
 
-_PROMPT_TEMPLATE = """당신은 장기 보유 목적의 국내 주식 포트폴리오를 운용하는 AI Investor입니다.
+_MARKET_LABEL = {"KR": "국내 주식", "US": "미국 주식(달러 기준)"}
+_EXAMPLE_ITEM = {
+    "KR": '"ticker": "005930", "name": "삼성전자"',
+    "US": '"ticker": "NVDA", "name": "NVIDIA"',
+}
+# 보유종목이 universe.json에서 빠졌을 때(과거 편입분 등) 기술적 분석 심볼 변환에 쓸 기본 시장.
+# 미국은 NASDAQ/NYSE 모두 yfinance 심볼이 티커 그대로라 어느 쪽이든 결과가 같다.
+_DEFAULT_MARKET = {"KR": "KOSPI", "US": "NASDAQ"}
+_FX_STANCE_LABEL = {"favorable": "유리", "neutral": "중립", "unfavorable": "불리"}
+
+_PROMPT_TEMPLATE = """당신은 장기 보유 목적의 {market_label} 포트폴리오를 운용하는 AI Investor입니다.
 아래 제약 조건을 목표로 제안하세요 (최종 검증/강제는 별도로 코드가 수행합니다):
 - 총 보유 종목 수는 최대 {max_positions}개를 넘지 않습니다.
 - 종목당 목표 비중은 최대 {max_weight_pct}%를 넘지 않습니다.
@@ -49,7 +64,7 @@ _PROMPT_TEMPLATE = """당신은 장기 보유 목적의 국내 주식 포트폴�
 
 신규 편입 후보 (최근 {lookback_days}일 리포트에서의 등장 통계 및 최신 지표):
 {candidates}
-
+{fx_context}
 보유종목과 후보 각각에 대해 action(NEW_BUY/ADD/TRIM/EXIT/HOLD), target_weight_pct(0~100 숫자),
 conviction_score(0~100 정수), rationale(1~2문장, 편입/편출/유지 근거)을 작성하세요.
 market_context에는 이번 주 전체 판단을 1~2문장으로 요약하세요.
@@ -60,7 +75,7 @@ market_context에는 이번 주 전체 판단을 1~2문장으로 요약하세요
 {{
   "market_context": "...",
   "items": [
-    {{"ticker": "005930", "name": "삼성전자", "action": "ADD", "target_weight_pct": 15.0,
+    {{{example_item}, "action": "ADD", "target_weight_pct": 15.0,
       "conviction_score": 70, "rationale": "..."}}
   ]
 }}
@@ -80,8 +95,8 @@ def _reports_collection():
     return client[config.MONGODB_DB]["reports"]
 
 
-def fetch_recent_kr_recommendations(lookback_days: int | None = None) -> list[dict[str, Any]]:
-    """최근 lookback_days일 리포트에서 국내(KR) 추천 종목만 모아 반환한다."""
+def fetch_recent_recommendations(region: str, lookback_days: int | None = None) -> list[dict[str, Any]]:
+    """최근 lookback_days일 리포트에서 해당 시장(KR/US) 추천 종목만 모아 반환한다."""
     lookback_days = lookback_days if lookback_days is not None else config.INVESTOR_LOOKBACK_DAYS
     cutoff = (date.today() - timedelta(days=lookback_days)).isoformat()
     collection = _reports_collection()
@@ -90,7 +105,7 @@ def fetch_recent_kr_recommendations(lookback_days: int | None = None) -> list[di
     entries = []
     for doc in docs:
         for rec in doc.get("recommendations", []):
-            if rec.get("region") != "KR":
+            if rec.get("region") != region:
                 continue
             entries.append({**rec, "_reportDate": doc.get("date", ""), "_reportHour": doc.get("hour", 0)})
     return entries
@@ -120,10 +135,49 @@ def build_conviction_stats(entries: list[dict[str, Any]]) -> dict[str, dict[str,
     return stats
 
 
-def _fetch_holding_technical(ticker: str, universe_by_ticker: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
+def fetch_latest_fx_analysis() -> dict[str, Any] | None:
+    """가장 최근 리포트의 환율 분석(processing/fx_analysis.py). 없거나 조회 실패 시 None."""
+    try:
+        doc = _reports_collection().find_one(
+            {"fxAnalysis": {"$exists": True}}, {"fxAnalysis": 1, "date": 1, "hour": 1}, sort=[("date", -1), ("hour", -1)]
+        )
+    except Exception as exc:
+        log.info("최신 환율 분석 조회 실패(무시): %s", exc)
+        return None
+    if not doc:
+        return None
+    return {**doc["fxAnalysis"], "_reportDate": doc.get("date"), "_reportHour": doc.get("hour")}
+
+
+def _format_fx_context(fx: dict[str, Any] | None, usd_krw_rate: float | None) -> str:
+    lines = ["", "환율 컨텍스트 (이 슬리브는 원화를 달러로 환전해 투자하며, 원화 환산 수익률에는 환차손익이 포함됩니다):"]
+    if usd_krw_rate:
+        lines.append(f"- 현재 USD/KRW {usd_krw_rate:,.2f}원")
+    if fx:
+        lines.append(
+            f"- {fx.get('_reportDate')} {fx.get('_reportHour')}시 리포트 기준: 1개월 {fx.get('change1mPct', '-')}%, "
+            f"3개월 범위 {fx.get('low3m', '-')}~{fx.get('high3m', '-')}원, 추세={fx.get('emaTrend', '-')}"
+        )
+        if fx.get("summary"):
+            lines.append(f"- AI 환율 판단: {fx['summary']}")
+        krw_to_usd = fx.get("krwToUsd") or {}
+        if krw_to_usd.get("stance"):
+            lines.append(
+                f"- 원→달러 환전: {_FX_STANCE_LABEL.get(krw_to_usd['stance'], krw_to_usd['stance'])} — {krw_to_usd.get('comment', '')}"
+            )
+    lines.append(
+        "- 환율이 불리한 국면이면 신규 매수 규모를 한 번에 키우기보다 분할 편입을 고려하세요 "
+        "(환전 자체는 매수 체결 시 자동으로 처리되므로 별도 항목으로 제안하지 마세요)."
+    )
+    return "\n".join(lines) + "\n"
+
+
+def _fetch_holding_technical(
+    ticker: str, universe_by_ticker: dict[str, dict[str, Any]], region: str
+) -> dict[str, Any] | None:
     # 보유종목이 universe.json(시가총액 상위 시드 리스트)에서 이미 빠졌을 수도 있어(과거 편입분 등)
-    # 시장 구분을 모르면 KOSPI로 가정한다. 실패해도 avgPrice로 대체되므로 안전하다.
-    market = universe_by_ticker.get(ticker, {}).get("market", "KOSPI")
+    # 시장 구분을 모르면 시장별 기본값(_DEFAULT_MARKET)으로 가정한다. 실패해도 avgPrice로 대체되므로 안전하다.
+    market = universe_by_ticker.get(ticker, {}).get("market", _DEFAULT_MARKET[region])
     try:
         return technical_stage.get_technical_signal(ticker, market)
     except Exception:
@@ -297,28 +351,39 @@ def _parse_llm_response(raw: Any) -> dict[str, Any]:
     return {"market_context": raw.get("market_context", ""), "items": items}
 
 
-def decide(state: dict[str, Any], week_of: date) -> dict[str, Any]:
+def _market_state(state: dict[str, Any], region: str) -> tuple[list[dict[str, Any]], float]:
+    """state에서 시장별 (보유종목, 슬리브 통화 기준 현금)을 꺼낸다. markets 필드가 없는 구버전 web 응답은
+    최상위 holdings/cashKrw가 곧 KR 슬리브다(미국 슬리브 미지원)."""
+    markets = state.get("markets")
+    if markets is None:
+        if region != "KR":
+            raise RuntimeError("web 앱이 미국 슬리브를 지원하지 않는 구버전입니다 (state.markets 없음).")
+        return state.get("holdings", []), state.get("cashKrw", 0.0)
+    market = markets.get(region) or {}
+    return market.get("holdings", []), market.get("cash", 0.0)
+
+
+def decide(state: dict[str, Any], week_of: date, region: str = "KR") -> dict[str, Any]:
     """investor_client.fetch_state()의 반환값(state)과 이번 결정 기준일(week_of)을 받아
-    검증된 주간 제안 dict를 반환한다.
+    해당 시장(region) 슬리브의 검증된 주간 제안 dict를 반환한다.
 
     반환 형식은 investor_client.submit_proposal()에 그대로 넘길 수 있는 형태
     (weekOf 제외 — 그건 run_ai_investor.py에서 채운다):
     {market_context, degraded, items: [{ticker, name, action, targetWeightPct,
      currentWeightPct, convictionScore, rationale, riskFlags}]}
     """
-    holdings = state.get("holdings", [])
-    cash_krw = state.get("cashKrw", 0.0)
+    holdings, cash = _market_state(state, region)
     settings = state["settings"]
 
     universe_by_ticker = _load_universe_by_ticker()
-    entries = fetch_recent_kr_recommendations()
+    entries = fetch_recent_recommendations(region)
     stats = build_conviction_stats(entries)
 
     holdings_by_ticker = {h["ticker"]: h for h in holdings}
     priced: dict[str, float] = {}
     technical_by_ticker: dict[str, dict[str, Any] | None] = {}
     for h in holdings:
-        technical = _fetch_holding_technical(h["ticker"], universe_by_ticker)
+        technical = _fetch_holding_technical(h["ticker"], universe_by_ticker, region)
         technical_by_ticker[h["ticker"]] = technical
         price = technical["price"] if technical else h["avgPrice"]
         priced[h["ticker"]] = price * h["quantity"]
@@ -327,7 +392,8 @@ def decide(state: dict[str, Any], week_of: date) -> dict[str, Any]:
         if technical:
             investor_signal_writer.record(h["ticker"], week_of, technical["signal"], technical["emaTrend"])
 
-    total_value = sum(priced.values()) + cash_krw
+    # 슬리브 통화 기준(KR=원, US=달러). 기술적 분석 가격도 같은 통화(yfinance 원 시세)라 그대로 합산한다.
+    total_value = sum(priced.values()) + cash
     holdings_with_weight = [
         {
             **h,
@@ -358,7 +424,13 @@ def decide(state: dict[str, Any], week_of: date) -> dict[str, Any]:
             "volatilityPct": (c.get("latestTechnical") or {}).get("volatilityPct"),
         }
 
+    fx_context = (
+        _format_fx_context(fetch_latest_fx_analysis(), state.get("usdKrwRate")) if region == "US" else ""
+    )
     prompt = _PROMPT_TEMPLATE.format(
+        market_label=_MARKET_LABEL[region],
+        example_item=_EXAMPLE_ITEM[region],
+        fx_context=fx_context,
         max_positions=settings["maxPositions"],
         max_weight_pct=settings["maxWeightPct"],
         cash_buffer_pct=settings["cashBufferPct"],

@@ -108,8 +108,9 @@ model InvestorHolding {
   id           String                @id @default(cuid())
   ticker       String                @unique
   name         String
+  region       String                @default("KR") // "KR" | "US" — 시장별 슬리브(독립 운용 자본) 구분
   quantity     Float
-  avgPrice     Float
+  avgPrice     Float // region의 통화(KR=KRW, US=USD) 기준
   currency     String                @default("KRW")
   createdAt    DateTime              @default(now())
   updatedAt    DateTime              @updatedAt
@@ -133,6 +134,7 @@ model InvestorTransaction {
 model InvestorProposal {
   id            String                 @id @default(cuid())
   weekOf        DateTime // 의사결정 기준 주(월요일 날짜)
+  region        String                 @default("KR") // "KR" | "US" — 시장별로 주간 제안이 따로 생성된다
   status        String                 @default("PENDING") // "PENDING" | "APPROVED" | "REJECTED" | "EXECUTED" | "FAILED"
   marketContext String // AI가 작성한 이번 주 판단 요약
   degraded      Boolean                @default(false) // Claude 파싱/검증 실패로 빈 제안이 된 경우
@@ -148,6 +150,22 @@ model InvestorSnapshot {
   id            String   @id @default(cuid())
   date          DateTime @unique
   totalValueKrw Float
+}
+
+// 미국 슬리브의 원화 대기자금 <-> 달러 현금 환전 원장 (페이퍼 트레이딩, 환전 스프레드 미반영).
+// 미국 슬리브 자본은 원화(시드금액 x 미국 배분비율)로 시작하며, 수동 환전(/investor 미국 탭) 또는
+// 매수 체결 시 달러가 부족하면 자동 환전(web/lib/investor-execution.ts)으로 달러 현금이 된다.
+// 잔액 계산은 web/lib/investor-state.ts의 computeInvestorCash 참고.
+model InvestorFxConversion {
+  id         String   @id @default(cuid())
+  direction  String // "KRW_TO_USD" | "USD_TO_KRW"
+  krwAmount  Float
+  usdAmount  Float
+  rate       Float // 적용 환율 (원/달러)
+  source     String   @default("MANUAL") // "MANUAL" | "AUTO"(매수 체결 시 부족분 자동 환전)
+  proposalId String? // source=AUTO일 때 이 환전을 발생시킨 InvestorProposal.id
+  executedAt DateTime
+  createdAt  DateTime @default(now())
 }
 
 model InvestorProposalItem {

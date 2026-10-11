@@ -6,6 +6,9 @@ import type { InvestorSettings } from "@/lib/investor-settings";
 
 export default function InvestorSettingsDialog({ settings }: { settings: InvestorSettings }) {
   const [open, setOpen] = useState(false);
+  const [usAllocationPct, setUsAllocationPct] = useState(String(settings.usAllocationPct));
+  const usPct = Number(usAllocationPct);
+  const usPctValid = Number.isFinite(usPct) && usPct >= 0 && usPct <= 100;
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -45,6 +48,27 @@ export default function InvestorSettingsDialog({ settings }: { settings: Investo
                 className="mt-1 w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm"
               />
             </label>
+            <label className="block text-xs text-slate-500">
+              미국 주식 배분 비율 (%)
+              <input
+                name="usAllocationPct"
+                type="number"
+                step="1"
+                min="0"
+                max="100"
+                required
+                value={usAllocationPct}
+                onChange={(e) => setUsAllocationPct(e.target.value)}
+                className="mt-1 w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm"
+              />
+              <span className="mt-1 block text-[11px] text-slate-400">
+                {usPctValid ? `🇰🇷 한국 ${100 - usPct}% · 🇺🇸 미국 ${usPct}%` : "0~100 사이로 입력하세요"} — 시드금액을
+                이 비율로 나눠 시장별로 독립 운용합니다. 이미 투자된 금액보다 작게 줄일 수는 없습니다.
+              </span>
+            </label>
+            <p className="border-t border-slate-100 pt-2 text-[11px] font-medium text-slate-400">
+              아래 리스크 한도는 한국/미국 슬리브에 각각 적용됩니다.
+            </p>
             <label className="block text-xs text-slate-500">
               최대 종목 수
               <input

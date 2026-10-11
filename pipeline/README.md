@@ -126,7 +126,7 @@ python run_pipeline.py --dry-run --date 2026-08-04 --hour 19
 | 파일/디렉터리 | 역할 |
 |---|---|
 | `config.py` | 환경변수 로딩 + methodology.html 파라미터 |
-| `ai_client.py` | Claude 호출 추상화 (CLI/API 전환, JSON 파싱 실패 시 최대 3회 재시도, 호출 예산 26회) |
+| `ai_client.py` | Claude 호출 추상화 (CLI/API 전환, JSON 파싱 실패 시 최대 3회 재시도, 호출 예산 기본 29회) |
 | `collectors/` | Stage 1: Naver/Marketaux 뉴스 수집 |
 | `processing/clean.py` | Stage 2: 전처리/필터링 |
 | `processing/classify.py` | Stage 3: AI 기사 분류 |
@@ -135,6 +135,7 @@ python run_pipeline.py --dry-run --date 2026-08-04 --hour 19
 | `processing/technical.py` | Stage 5b: 기술적 분석 (yfinance) |
 | `processing/sentiment.py` | Stage S: 감성 분석 |
 | `processing/recommend.py` | Stage 6: 최종 추천 선별 + 병합 |
+| `processing/fx_analysis.py` | Stage 6b: 원/달러 환율 분석 (yfinance 지표 + Naver 환율 뉴스 → Claude로 원→달러/달러→원 판단). 실패해도 리포트는 저장되고 `fxAnalysis` 필드만 빠짐 |
 | `storage/mongo_writer.py` | Stage 7: MongoDB 저장 (365일 TTL) |
 | `run_pipeline.py` | 오케스트레이터 (CLI 진입점) |
 | `portfolio_client.py`, `run_portfolio_movers.py` | 보유종목 등락률 TOP5 뉴스 파이프라인 (주 파이프라인과 별개) |
@@ -146,13 +147,19 @@ python run_pipeline.py --dry-run --date 2026-08-04 --hour 19
 
 ## 6. AI Investor (주 1회 반자동 장기 포트폴리오)
 
-`run_ai_investor.py`가 매주 월요일 08:00 KST(`ai-investor-decide.timer`)에 실행되어, 최근
-`INVESTOR_LOOKBACK_DAYS`일치 `reports` 컬렉션에서 국내 종목의 컨빅션 통계(연속 추천 등장 횟수 +
+`run_ai_investor.py`가 매주 월요일 08:00 KST(`ai-investor-decide.timer`)에 실행되어, **한국(KR)과
+미국(US) 슬리브 각각에 대해** 최근 `INVESTOR_LOOKBACK_DAYS`일치 `reports` 컬렉션에서 해당 시장 종목의 컨빅션 통계(연속 추천 등장 횟수 +
 최신 지표)를 뽑고, web 앱의 `/api/investor/state`에서 현재 보유종목/현금/리스크 설정(최대 종목수,
 종목당 비중 상한, 현금 버퍼)을 가져온 뒤 Claude CLI로 리밸런싱안을 만든다. LLM이 제안한 비중/종목수는
 `processing/investor_decide.enforce_constraints()`가 항상 사후 검증·클램프하며, 파싱/검증에 실패하면
 규칙기반 대체 매매안을 만들지 않고 빈 제안으로 안전 정지한다. 완성된 제안은
 `/api/investor/proposals`에 PENDING 상태로 제출되고, `/investor` 페이지에서 사람이 승인/거절한다.
+
+**미국 슬리브**: web 운용 설정의 "미국 주식 배분 비율"만큼 시드를 떼어 달러 기준으로 운용한다(기본 0% —
+0%면 미국 제안은 건너뜀). `/api/investor/state`의 `markets.US.cash`는 달러 현금 + 원화 대기자금(현재 환율
+환산)이고, 프롬프트에는 최신 리포트의 환율 분석(`fxAnalysis`)이 참고로 들어간다. 시장별로 실패가 격리되어
+한쪽이 실패해도 다른 쪽 제안은 제출되며, 하나라도 실패하면 exit 1. `--market KR|US`로 한 시장만 실행할 수 있다.
+환전/수익률 규칙은 `web/content/ai-investor-strategy.md` 10절 참고.
 
 **중요**: 이번 구현 범위(Phase A+B)는 승인해도 실주문이 나가지 않는다. `broker/toss_client.py`는
 시세 조회(`GET /api/v1/prices`)와 개장일 조회(`GET /api/v1/market-calendar/KR`)만 구현되어 있고,
@@ -186,7 +193,7 @@ python run_pipeline.py --dry-run --date 2026-08-04 --hour 19
 로컬 테스트:
 ```bash
 python run_ai_investor.py --dry-run
-# pipeline/data/ai_investor/<그 주 월요일>.json 에 생성된 제안 확인
+# pipeline/data/ai_investor/<그 주 월요일>_KR.json, _US.json 에 생성된 제안 확인
 ```
 
 ## 5. 트러블슈팅
@@ -200,7 +207,7 @@ python run_ai_investor.py --dry-run
   후보 신뢰도 기준 규칙 기반 선별로 대체하고, 저장된 리포트에 `selectionDegraded: true`를 남깁니다.
   (다른 단계는 여전히 재시도 실패 시 파이프라인을 중단합니다.)
 - **Claude 호출 예산 초과 오류**: 기사 수가 비정상적으로 많거나 배치가 파싱 재시도를 반복하는
-  경우입니다. `MAX_CLAUDE_CALLS`(기본 26 = 정상 호출분 + 재시도 여유분)를 늘리기보다 원인(API 응답
+  경우입니다. `MAX_CLAUDE_CALLS`(기본 29 = 정상 호출분(환율 분석 포함 21) + 재시도 여유분)를 늘리기보다 원인(API 응답
   형식 오류 등)을 먼저 확인하세요. 예산 초과 시 파이프라인은 리포트를 저장하지 않고 안전하게
   중단됩니다.
 - **yfinance가 일부 종목 데이터를 못 가져옴**: 해당 종목은 이번 회차 추천에서 자동 제외됩니다

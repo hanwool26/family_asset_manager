@@ -28,18 +28,22 @@ interface ProposalItemInput {
 
 interface ProposalInput {
   weekOf: string; // "YYYY-MM-DD"
+  region?: "KR" | "US"; // 미국 탭 도입 전 파이프라인은 보내지 않음 → KR 취급
   marketContext: string;
   degraded?: boolean;
   items: ProposalItemInput[];
 }
 
 const VALID_ACTIONS = new Set(["NEW_BUY", "ADD", "TRIM", "EXIT", "HOLD"]);
+const VALID_REGIONS = new Set(["KR", "US"]);
+const REGION_LABEL: Record<string, string> = { KR: "한국 주식", US: "미국 주식" };
 
 function validate(body: unknown): body is ProposalInput {
   if (!body || typeof body !== "object") return false;
   const b = body as Partial<ProposalInput>;
   if (typeof b.weekOf !== "string" || Number.isNaN(Date.parse(b.weekOf))) return false;
   if (typeof b.marketContext !== "string") return false;
+  if (b.region !== undefined && !VALID_REGIONS.has(b.region)) return false;
   if (!Array.isArray(b.items)) return false;
   return b.items.every(
     (item) =>
@@ -69,12 +73,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "잘못된 JSON body 입니다." }, { status: 400 });
   }
   if (!validate(body)) {
-    return NextResponse.json({ error: "요청 형식이 올바르지 않습니다 (weekOf/marketContext/items 확인)." }, { status: 400 });
+    return NextResponse.json({ error: "요청 형식이 올바르지 않습니다 (weekOf/region/marketContext/items 확인)." }, { status: 400 });
   }
 
+  const region = body.region ?? "KR";
   const proposal = await prisma.investorProposal.create({
     data: {
       weekOf: new Date(body.weekOf),
+      region,
       marketContext: body.marketContext,
       degraded: body.degraded ?? false,
       items: {
@@ -96,8 +102,8 @@ export async function POST(request: NextRequest) {
   // 카카오 알림은 실패해도 제안 저장 자체는 이미 끝난 뒤라 응답에 영향 없음(notifyFamily 내부에서 삼킴).
   const buyCount = body.items.filter((item) => item.action !== "HOLD").length;
   await notifyFamily(
-    `📈 AI Investor 새 리밸런싱 제안이 도착했어요 (${body.weekOf} 기준, ${buyCount}건 매매 검토 필요). 앱에서 승인/거절해주세요.`,
-    { webUrl: `${request.nextUrl.origin}/investor`, buttonTitle: "제안 확인하기" }
+    `📈 AI Investor ${REGION_LABEL[region]} 새 리밸런싱 제안이 도착했어요 (${body.weekOf} 기준, ${buyCount}건 매매 검토 필요). 앱에서 승인/거절해주세요.`,
+    { webUrl: `${request.nextUrl.origin}/investor?market=${region}`, buttonTitle: "제안 확인하기" }
   );
 
   return NextResponse.json({ id: proposal.id }, { status: 201 });

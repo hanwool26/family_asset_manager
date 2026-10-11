@@ -65,6 +65,43 @@ export interface Report {
   categorySummaries: CategorySummary[];
   /** true면 AI 최종 선별이 실패해 규칙 기반 폴백으로 대체된 리포트 (과거 문서엔 없음 → false 취급). */
   selectionDegraded?: boolean;
+  /** 원/달러 환율 분석 (pipeline/processing/fx_analysis.py). 도입 전 문서 또는 지표 조회 실패 시 없음. */
+  fxAnalysis?: FxAnalysis;
+}
+
+/** favorable: 지금 그 방향으로 환전하기 유리한 편 / unfavorable: 불리한 편(분할·대기 고려). */
+export type FxStance = "favorable" | "neutral" | "unfavorable";
+
+/** 향후 1~2주 원/달러 환율 방향. up = 환율 상승(원화 약세). */
+export type FxOutlook = "up" | "down" | "sideways";
+
+export interface FxContextIndicator {
+  label: string;
+  value: number;
+  changePct: number | null;
+  change1mPct: number | null;
+}
+
+export interface FxAnalysis {
+  pair: "USD/KRW";
+  rate: number;
+  changePct: number | null;
+  change1wPct: number | null;
+  change1mPct: number | null;
+  high3m: number;
+  low3m: number;
+  rsi: number | null;
+  emaTrend: "up" | "down" | "neutral";
+  volatilityPct: number | null;
+  context: FxContextIndicator[];
+  headlines: { title: string; url: string; publishedAt: string }[];
+  /** true면 Claude 판단 생성에 실패해 지표/헤드라인만 있는 상태 (아래 AI 필드 없음). */
+  aiDegraded: boolean;
+  summary?: string;
+  outlook?: FxOutlook;
+  drivers?: string[];
+  krwToUsd?: { stance: FxStance; comment: string };
+  usdToKrw?: { stance: FxStance; comment: string };
 }
 
 export const CATEGORY_LABELS: Record<NewsCategory, string> = {

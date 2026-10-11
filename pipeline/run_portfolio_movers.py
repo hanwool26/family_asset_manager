@@ -60,7 +60,7 @@ def _format_articles(articles: list[dict[str, Any]]) -> str:
 
 def _search_news(market: str, ticker: str, name: str) -> list[dict[str, Any]]:
     if market == "KR":
-        articles = naver_news._search_keyword(name)
+        articles = naver_news.search_keyword(name)
     else:
         try:
             articles = marketaux_news._search_symbol_group([ticker])

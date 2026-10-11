@@ -22,7 +22,7 @@ def _strip_tags(text: str) -> str:
     return html.unescape(re.sub(r"<[^>]+>", "", text or ""))
 
 
-def _search_keyword(keyword: str) -> list[dict[str, Any]]:
+def search_keyword(keyword: str) -> list[dict[str, Any]]:
     headers = {
         "X-NCP-APIGW-API-KEY-ID": config.NAVER_CLIENT_ID,
         "X-NCP-APIGW-API-KEY": config.NAVER_CLIENT_SECRET,
@@ -56,7 +56,7 @@ def collect() -> list[dict[str, Any]]:
     keywords = [kw for group in config.NEWS_KEYWORDS.values() for kw in group]
 
     for i, keyword in enumerate(keywords):
-        all_articles.extend(_search_keyword(keyword))
+        all_articles.extend(search_keyword(keyword))
         if i < len(keywords) - 1:
             time.sleep(config.NAVER_RATE_LIMIT_SECONDS)
 

@@ -22,6 +22,7 @@ from collectors import marketaux_news, naver_news
 from processing import candidates as candidates_stage
 from processing import classify as classify_stage
 from processing import clean as clean_stage
+from processing import fx_analysis as fx_stage
 from processing import recommend as recommend_stage
 from processing import summarize as summarize_stage
 from storage import mongo_writer
@@ -127,6 +128,18 @@ def run(target_date: date, hour: int, dry_run: bool) -> None:
     if len(recommendations) < 2:
         raise RuntimeError(f"최종 추천 종목이 너무 적습니다 ({len(recommendations)}개) — 리포트를 저장하지 않습니다.")
 
+    # Stage 6b: 원/달러 환율 분석 (부가 정보 — 실패해도 리포트는 그대로 저장)
+    log.info("[6b] 원/달러 환율 분석")
+    fx_analysis = fx_stage.analyze(target_date)
+    if fx_analysis:
+        log.info(
+            "  USD/KRW %.2f원, 원→달러=%s 달러→원=%s (aiDegraded=%s, claude 누적 호출 %d회)",
+            fx_analysis["rate"], fx_analysis.get("krwToUsd", {}).get("stance", "-"),
+            fx_analysis.get("usdToKrw", {}).get("stance", "-"), fx_analysis["aiDegraded"], ai_client.calls_used(),
+        )
+    else:
+        log.warning("  환율 분석을 건너뜁니다 (지표 조회 실패).")
+
     report = {
         "date": target_date.isoformat(),
         "hour": hour,
@@ -136,6 +149,8 @@ def run(target_date: date, hour: int, dry_run: bool) -> None:
         "categorySummaries": category_summaries,
         "selectionDegraded": degraded,
     }
+    if fx_analysis:
+        report["fxAnalysis"] = fx_analysis
     _save_local(run_dir, "recommendation.json", report)
 
     # Stage 7: 저장 & 배포

@@ -1,4 +1,4 @@
-import type { Report, Recommendation, CategorySummary } from "./types";
+import type { Report, Recommendation, CategorySummary, FxAnalysis } from "./types";
 
 function tech(
   overrides: Partial<Recommendation["technical"]> = {}
@@ -337,6 +337,44 @@ const latestCategorySummaries: CategorySummary[] = [
   },
 ];
 
+const mockFxAnalysis: FxAnalysis = {
+  pair: "USD/KRW",
+  rate: 1392.4,
+  changePct: 0.31,
+  change1wPct: -0.85,
+  change1mPct: 1.42,
+  high3m: 1418.2,
+  low3m: 1351.6,
+  rsi: 54.2,
+  emaTrend: "neutral",
+  volatilityPct: 7.8,
+  context: [
+    { label: "달러인덱스(DXY)", value: 101.84, changePct: 0.12, change1mPct: 0.9 },
+    { label: "미 10년물 국채금리(%)", value: 4.12, changePct: -0.48, change1mPct: 2.1 },
+  ],
+  headlines: [
+    { title: "원·달러 환율, 외국인 순매수에 1,390원대 등락", url: "https://example.com/fx-1", publishedAt: "" },
+    { title: "연준 위원들 \"금리 인하 서두를 필요 없어\"… 달러 강보합", url: "https://example.com/fx-2", publishedAt: "" },
+  ],
+  aiDegraded: false,
+  summary:
+    "원/달러 환율은 미 금리 인하 기대 후퇴로 달러가 강보합을 보였지만, 외국인 국내 주식 순매수가 이어지며 1,390원대 초반에서 제한적으로 상승했습니다. 3개월 범위의 중간 위에 위치해 방향성은 뚜렷하지 않습니다.",
+  outlook: "sideways",
+  drivers: [
+    "연준 금리 경로에 대한 기대 변화로 달러 강세 압력이 유지되고 있습니다.",
+    "외국인 국내 주식 순매수가 원화 강세 요인으로 작용하고 있습니다.",
+    "1,400원 부근에서는 외환당국 경계감이 상단을 제한하는 모습입니다.",
+  ],
+  krwToUsd: {
+    stance: "neutral",
+    comment: "3개월 범위 중간 위쪽이라 일시 환전보다는 2~3회 분할 환전으로 평균 단가를 맞추는 편이 무난해 보입니다.",
+  },
+  usdToKrw: {
+    stance: "neutral",
+    comment: "고점권과는 거리가 있어 달러를 서둘러 원화로 되돌릴 유인은 크지 않아 보입니다.",
+  },
+};
+
 function scaleTechnical(
   base: Recommendation["technical"],
   seed: number
@@ -365,6 +403,7 @@ function deriveReport(date: string, hour: number, seed: number): Report {
       technical: scaleTechnical(r.technical, seed + r.rank),
     })),
     categorySummaries: latestCategorySummaries,
+    fxAnalysis: mockFxAnalysis,
   };
 }
 
