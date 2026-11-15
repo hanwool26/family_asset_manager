@@ -40,6 +40,29 @@ export default function AssetsSubNav({ members }: { members: Member[] }) {
         </Link>
       ))}
       <AddMemberDialog />
+      <span className="mx-1 h-4 w-px bg-slate-200" aria-hidden />
+      <Link
+        href="/assets/goals"
+        className={
+          "rounded-full px-3 py-1.5 text-sm font-medium transition-colors " +
+          (pathname.startsWith("/assets/goals")
+            ? "bg-slate-900 text-white"
+            : "text-slate-500 hover:bg-slate-100")
+        }
+      >
+        목표
+      </Link>
+      <Link
+        href="/assets/loan"
+        className={
+          "rounded-full px-3 py-1.5 text-sm font-medium transition-colors " +
+          (pathname === "/assets/loan"
+            ? "bg-slate-900 text-white"
+            : "text-slate-500 hover:bg-slate-100")
+        }
+      >
+        대출 계산기
+      </Link>
     </div>
   );
 }

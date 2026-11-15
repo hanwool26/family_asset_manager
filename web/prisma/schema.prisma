@@ -46,11 +46,12 @@ model PortfolioSnapshot {
 }
 
 model FamilyMember {
-  id        String            @id @default(cuid())
-  name      String            @unique
-  order     Int               @default(0)
-  createdAt DateTime          @default(now())
-  snapshots FinanceSnapshot[]
+  id           String              @id @default(cuid())
+  name         String              @unique
+  order        Int                 @default(0)
+  createdAt    DateTime            @default(now())
+  snapshots    FinanceSnapshot[]
+  goalFundings GoalFundingSource[]
 }
 
 model FinanceSnapshot {
@@ -75,6 +76,77 @@ model FinanceItem {
   amount     Float
   note       String?
   order      Int             @default(0)
+}
+
+// --- 가족 목표(아파트/자동차 등 큰 지출) 예산 계획 ---
+// 필요 금액은 GoalCostItem 합계, 가용 현금은 GoalFundingSource가 가리키는 각 구성원 최신 스냅샷 항목의 합계,
+// 앞으로 모일 돈은 가계 공통 HouseholdCashflow로 계산한다(web/lib/goal-plan.ts).
+
+model FamilyGoal {
+  id             String              @id @default(cuid())
+  name           String
+  kind           String // "APARTMENT" | "CAR" | "OTHER"
+  targetDate     DateTime
+  status         String              @default("ACTIVE") // "ACTIVE" | "ACHIEVED" | "PAUSED"
+  memo           String?
+  order          Int                 @default(0)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  costItems      GoalCostItem[]
+  fundingSources GoalFundingSource[]
+  loanScenarios  GoalLoanScenario[]
+}
+
+model GoalCostItem {
+  id      String     @id @default(cuid())
+  goalId  String
+  goal    FamilyGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  name    String // 예: 잔금, 인테리어, 가전
+  amount  Float
+  dueDate DateTime? // 지출 예정일. 없으면 목표일에 지출되는 것으로 본다
+  note    String?
+  order   Int        @default(0)
+}
+
+// FinanceItem.id는 스냅샷 저장 시마다 새로 만들어지므로(saveSnapshot이 항목을 지우고 재생성) id 대신
+// (구성원, 유형, 분류, 항목명)으로 연결하고, 조회 시 그 구성원의 최신 스냅샷에서 금액을 찾는다.
+model GoalFundingSource {
+  id       String       @id @default(cuid())
+  goalId   String
+  goal     FamilyGoal   @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  memberId String
+  member   FamilyMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  type     String // "ASSET" | "LIABILITY"
+  category String
+  name     String
+}
+
+model GoalLoanScenario {
+  id            String     @id @default(cuid())
+  goalId        String
+  goal          FamilyGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  name          String
+  principal     Float
+  annualRatePct Float
+  termMonths    Int
+  method        String // "EQUAL_PAYMENT" | "EQUAL_PRINCIPAL" | "BULLET"
+  graceMonths   Int        @default(0)
+  createdAt     DateTime   @default(now())
+}
+
+// 모든 목표가 함께 쓰는 가계 공통 수입/지출. MONTHLY는 startDate(없으면 지금부터)~endDate(없으면 계속) 매월,
+// ONCE는 startDate 하루에 한 번 반영된다.
+model HouseholdCashflow {
+  id        String    @id @default(cuid())
+  label     String
+  direction String // "INCOME" | "EXPENSE"
+  frequency String // "MONTHLY" | "ONCE"
+  amount    Float
+  startDate DateTime?
+  endDate   DateTime?
+  note      String?
+  order     Int       @default(0)
+  createdAt DateTime  @default(now())
 }
 
 model Conversation {
@@ -118,16 +190,16 @@ model InvestorHolding {
 }
 
 model InvestorTransaction {
-  id              String          @id @default(cuid())
-  holdingId       String
-  holding         InvestorHolding @relation(fields: [holdingId], references: [id], onDelete: Cascade)
-  type            String // "BUY" | "SELL"
-  quantity        Float
-  price           Float
-  proposalItemId  String? // 이 거래를 발생시킨 InvestorProposalItem.id (수동 개입과 구분하기 위한 추적용)
-  tossOrderId     String? // Phase C(실주문 연동) 이후 채워짐
-  executedAt      DateTime
-  createdAt       DateTime        @default(now())
+  id             String          @id @default(cuid())
+  holdingId      String
+  holding        InvestorHolding @relation(fields: [holdingId], references: [id], onDelete: Cascade)
+  type           String // "BUY" | "SELL"
+  quantity       Float
+  price          Float
+  proposalItemId String? // 이 거래를 발생시킨 InvestorProposalItem.id (수동 개입과 구분하기 위한 추적용)
+  tossOrderId    String? // Phase C(실주문 연동) 이후 채워짐
+  executedAt     DateTime
+  createdAt      DateTime        @default(now())
 }
 
 // 주 1회 AI가 생성하는 리밸런싱 제안 1건 (편입/편출/비중조절 묶음).
@@ -169,16 +241,16 @@ model InvestorFxConversion {
 }
 
 model InvestorProposalItem {
-  id                String           @id @default(cuid())
-  proposalId        String
-  proposal          InvestorProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
-  ticker            String
-  name              String
-  action            String // "NEW_BUY" | "ADD" | "TRIM" | "EXIT" | "HOLD"
-  targetWeightPct   Float
-  currentWeightPct  Float
-  convictionScore   Int // 0~100
-  rationale         String // 편입/편출 근거 (AI 요약)
-  riskFlags         String[] @default([])
-  orderStatus       String           @default("NOT_EXECUTED") // "NOT_EXECUTED" | "FILLED" | "SKIPPED" | "FAILED" | "PLACED"(Phase C 실주문 접수중)
+  id               String           @id @default(cuid())
+  proposalId       String
+  proposal         InvestorProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  ticker           String
+  name             String
+  action           String // "NEW_BUY" | "ADD" | "TRIM" | "EXIT" | "HOLD"
+  targetWeightPct  Float
+  currentWeightPct Float
+  convictionScore  Int // 0~100
+  rationale        String // 편입/편출 근거 (AI 요약)
+  riskFlags        String[]         @default([])
+  orderStatus      String           @default("NOT_EXECUTED") // "NOT_EXECUTED" | "FILLED" | "SKIPPED" | "FAILED" | "PLACED"(Phase C 실주문 접수중)
 }

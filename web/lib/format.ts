@@ -16,6 +16,19 @@ export function formatKrw(value: number): string {
   return `${Math.round(value).toLocaleString("ko-KR")}원`;
 }
 
+/** 큰 금액을 억/만 단위로 읽기 쉽게 표시 (예: 325,000,000 -> "3억 2,500만원"). 만원 미만은 버린다. */
+export function formatKrwEok(value: number): string {
+  const sign = value < 0 ? "-" : "";
+  const man = Math.floor(Math.abs(value) / 10_000);
+  if (man === 0) return formatKrw(value);
+  const eok = Math.floor(man / 10_000);
+  const rest = man % 10_000;
+  const parts = [];
+  if (eok > 0) parts.push(`${eok.toLocaleString("ko-KR")}억`);
+  if (rest > 0) parts.push(`${rest.toLocaleString("ko-KR")}만`);
+  return `${sign}${parts.join(" ")}원`;
+}
+
 export function formatSignedKrw(value: number): string {
   const sign = value > 0 ? "+" : "";
   return `${sign}${Math.round(value).toLocaleString("ko-KR")}원`;
